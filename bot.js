@@ -1,14 +1,25 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- *   ISLAMIC KNOWLEDGE BOT  —  v2  (sunnah.com API backend)
+ *   ISLAMIC KNOWLEDGE BOT
  * ═══════════════════════════════════════════════════════════════
  *
- *  Hadith  — sunnah.com API  (api.sunnah.com)  KEY: SUNNAH_API_KEY
- *  Quran   — AlQuran Cloud   (api.alquran.cloud)  NO KEY
+ *  Hadith  — fawazahmed0 CDN  (cdn.jsdelivr.net)  NO KEY
+ *  Quran   — AlQuran Cloud    (api.alquran.cloud)  NO KEY
  *  Tafsir / Duas / Asma / Hijri — UmmahAPI         NO KEY
  *
- *  ENV:  DISCORD_TOKEN   (required)
- *        SUNNAH_API_KEY  (required — sunnah.com API key)
+ *  ENV:  DISCORD_TOKEN  (required)
+ *
+ *  Confirmed fawaz response structure (from live API):
+ *  {
+ *    metadata: { name, section: { "N": "Chapter Name" } },
+ *    hadiths: [{
+ *      hadithnumber: 1035,
+ *      arabicnumber: 1035,
+ *      text: "English text…",
+ *      grades: [{ name: "Al-Albani", grade: "Sahih" }, …],
+ *      reference: { book: 2, hadith: 646 }
+ *    }]
+ *  }
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -24,7 +35,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,   // required to read message content
+    GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
   ],
 });
@@ -32,45 +43,85 @@ const client = new Client({
 // ─────────────────────────────────────────────────────
 //  API BASES
 // ─────────────────────────────────────────────────────
-const SUNNAH  = "https://api.sunnah.com/v1";
-const QURAN   = "https://api.alquran.cloud/v1";
-const UMMAH   = "https://ummahapi.com/api";
-
-const SUNNAH_KEY = process.env.SUNNAH_API_KEY || "cKKr53NtU7VQ1FfvKcjMVf7ANxz31i6l";
+const FAWAZ  = "https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions";
+const QURAN  = "https://api.alquran.cloud/v1";
+const UMMAH  = "https://ummahapi.com/api";
 
 // ─────────────────────────────────────────────────────
 //  COLLECTIONS
-//  collectionId — sunnah.com collection identifier
+//  fawaz_eng  — English edition slug
+//  fawaz_ara  — Arabic edition slug (may 404 for some; handled gracefully)
 // ─────────────────────────────────────────────────────
 const COLLECTIONS = {
-  bukhari:   { name: "Sahih al-Bukhari",    arabic: "صحيح البخاري",       color: 0x1B5E20, emoji: "📗", total: 7563, collectionId: "bukhari"   },
-  muslim:    { name: "Sahih Muslim",         arabic: "صحيح مسلم",          color: 0x0D47A1, emoji: "📘", total: 7470, collectionId: "muslim"    },
-  abudawud:  { name: "Sunan Abu Dawud",      arabic: "سنن أبي داود",       color: 0x4A148C, emoji: "📙", total: 5274, collectionId: "abudawud"  },
-  tirmidhi:  { name: "Jami at-Tirmidhi",     arabic: "جامع الترمذي",       color: 0x880E4F, emoji: "📕", total: 3956, collectionId: "tirmidhi"  },
-  ibnmajah:  { name: "Sunan Ibn Majah",      arabic: "سنن ابن ماجه",       color: 0x004D40, emoji: "📒", total: 4341, collectionId: "ibnmajah"  },
-  nasai:     { name: "Sunan an-Nasa'i",      arabic: "سنن النسائي",        color: 0x37474F, emoji: "📓", total: 5761, collectionId: "nasai"     },
-  malik:     { name: "Muwatta Malik",        arabic: "موطأ مالك",          color: 0x6D4C41, emoji: "📔", total: 1858, collectionId: "malik"     },
-  nawawi40:  { name: "40 Hadith Nawawi",     arabic: "الأربعون النووية",   color: 0x00695C, emoji: "🌿", total: 42,   collectionId: "nawawi40"  },
-  qudsi40:   { name: "40 Hadith Qudsi",      arabic: "الأربعون القدسية",   color: 0x1A237E, emoji: "✨", total: 40,   collectionId: "qudsi40"   },
-  riyadussalihin: { name: "Riyad as-Salihin", arabic: "رياض الصالحين",    color: 0x2E7D32, emoji: "🌸", total: 1896, collectionId: "riyadussalihin" },
-  mishkat:   { name: "Mishkat al-Masabih",   arabic: "مشكاة المصابيح",    color: 0x4E342E, emoji: "📜", total: 6294, collectionId: "mishkat"   },
-  adab:      { name: "Al-Adab Al-Mufrad",    arabic: "الأدب المفرد",       color: 0x01579B, emoji: "🌺", total: 1322, collectionId: "adab"      },
+  bukhari:  {
+    name: "Sahih al-Bukhari", arabic: "صحيح البخاري",
+    color: 0x1B5E20, emoji: "📗", total: 7563,
+    fawaz_eng: "eng-bukhari",  fawaz_ara: "ara-bukhari1",
+  },
+  muslim:   {
+    name: "Sahih Muslim", arabic: "صحيح مسلم",
+    color: 0x0D47A1, emoji: "📘", total: 7470,
+    fawaz_eng: "eng-muslim",   fawaz_ara: "ara-muslim",
+  },
+  abudawud: {
+    name: "Sunan Abu Dawud", arabic: "سنن أبي داود",
+    color: 0x4A148C, emoji: "📙", total: 5274,
+    fawaz_eng: "eng-abudawud", fawaz_ara: "ara-abudawud",
+  },
+  tirmidhi: {
+    name: "Jami at-Tirmidhi", arabic: "جامع الترمذي",
+    color: 0x880E4F, emoji: "📕", total: 3956,
+    fawaz_eng: "eng-tirmidhi", fawaz_ara: "ara-tirmidhi",
+  },
+  ibnmajah: {
+    name: "Sunan Ibn Majah", arabic: "سنن ابن ماجه",
+    color: 0x004D40, emoji: "📒", total: 4341,
+    fawaz_eng: "eng-ibnmajah", fawaz_ara: "ara-ibnmajah",
+  },
+  nasai:    {
+    name: "Sunan an-Nasa'i", arabic: "سنن النسائي",
+    color: 0x37474F, emoji: "📓", total: 5761,
+    fawaz_eng: "eng-nasai",    fawaz_ara: "ara-nasai",
+  },
+  malik:    {
+    name: "Muwatta Malik", arabic: "موطأ مالك",
+    color: 0x6D4C41, emoji: "📔", total: 1858,
+    fawaz_eng: "eng-malik",    fawaz_ara: "ara-malik",
+  },
+  nawawi40: {
+    name: "40 Hadith Nawawi", arabic: "الأربعون النووية",
+    color: 0x00695C, emoji: "🌿", total: 42,
+    fawaz_eng: "eng-nawawi40", fawaz_ara: "ara-nawawi40",
+  },
+  qudsi40:  {
+    name: "40 Hadith Qudsi", arabic: "الأربعون القدسية",
+    color: 0x1A237E, emoji: "✨", total: 40,
+    fawaz_eng: "eng-qudsi40",  fawaz_ara: "ara-qudsi40",
+  },
+  dehlawi40: {
+    name: "40 Hadith Dehlawi", arabic: "أربعون الشاه ولي الله",
+    color: 0x4E342E, emoji: "📜", total: 40,
+    fawaz_eng: "eng-dehlawi",  fawaz_ara: "ara-dehlawi1",
+  },
 };
 const COL_KEYS = Object.keys(COLLECTIONS);
 
+// Bukhari & Muslim are universally Sahih — fawaz has no per-hadith grades for them
+const ALWAYS_SAHIH = new Set(["bukhari", "muslim"]);
+
 // ─────────────────────────────────────────────────────
-//  QURAN TRANSLATIONS  (AlQuran Cloud edition IDs)
+//  QURAN TRANSLATIONS
 // ─────────────────────────────────────────────────────
 const TRANSLATIONS = {
   sahih_international: { name: "Saheeh International", flag: "🇬🇧", edition: "en.sahih"    },
   pickthall:           { name: "Pickthall",             flag: "🇬🇧", edition: "en.pickthall" },
   yusuf_ali:           { name: "Yusuf Ali",             flag: "🇬🇧", edition: "en.yusufali"  },
 };
-const TRANS_KEYS  = Object.keys(TRANSLATIONS);
-const DEFAULT_TR  = "sahih_international";
+const TRANS_KEYS = Object.keys(TRANSLATIONS);
+const DEFAULT_TR = "sahih_international";
 
 // ─────────────────────────────────────────────────────
-//  TAFSIR EDITIONS  (UmmahAPI)
+//  TAFSIR EDITIONS
 // ─────────────────────────────────────────────────────
 const TAFSIRS = {
   ibn_kathir:    { name: "Ibn Kathir (Abridged)", scholar: "Hafiz Ibn Kathir",                         lang: "English", flag: "🇬🇧" },
@@ -80,35 +131,35 @@ const TAFSIRS = {
 };
 
 // ─────────────────────────────────────────────────────
-//  DUA CATEGORIES  (UmmahAPI)
+//  DUA CATEGORIES
 // ─────────────────────────────────────────────────────
 const DUAS = {
-  morning:      { name: "Morning Adhkar",     emoji: "🌅", count: 7 },
-  evening:      { name: "Evening Adhkar",     emoji: "🌆", count: 5 },
-  prayer:       { name: "During Prayer",      emoji: "🙏", count: 8 },
-  after_prayer: { name: "After Prayer",       emoji: "📿", count: 8 },
-  sleep:        { name: "Sleep",              emoji: "🌙", count: 6 },
-  food:         { name: "Food & Drink",       emoji: "🍽️", count: 6 },
-  travel:       { name: "Travel",             emoji: "✈️", count: 6 },
-  distress:     { name: "Distress & Anxiety", emoji: "💙", count: 7 },
-  forgiveness:  { name: "Forgiveness",        emoji: "🤍", count: 5 },
-  illness:      { name: "Illness & Healing",  emoji: "💊", count: 5 },
-  guidance:     { name: "Guidance",           emoji: "🧭", count: 3 },
-  protection:   { name: "Protection",         emoji: "🛡️", count: 4 },
-  dhikr:        { name: "Dhikr",              emoji: "📖", count: 6 },
-  knowledge:    { name: "Knowledge",          emoji: "📚", count: 3 },
-  gratitude:    { name: "Gratitude",          emoji: "🌸", count: 3 },
-  marriage:     { name: "Marriage & Family",  emoji: "👨‍👩‍👧", count: 4 },
-  hajj:         { name: "Hajj & Umrah",       emoji: "🕋", count: 4 },
-  grief:        { name: "Grief & Loss",       emoji: "🤲", count: 4 },
-  children:     { name: "Children",           emoji: "👶", count: 4 },
-  night_prayer: { name: "Night Prayer",       emoji: "⭐", count: 4 },
-  quran_recitation: { name: "Quran Recitation", emoji: "📜", count: 3 },
+  morning:          { name: "Morning Adhkar",     emoji: "🌅", count: 7 },
+  evening:          { name: "Evening Adhkar",     emoji: "🌆", count: 5 },
+  prayer:           { name: "During Prayer",      emoji: "🙏", count: 8 },
+  after_prayer:     { name: "After Prayer",       emoji: "📿", count: 8 },
+  sleep:            { name: "Sleep",              emoji: "🌙", count: 6 },
+  food:             { name: "Food & Drink",       emoji: "🍽️", count: 6 },
+  travel:           { name: "Travel",             emoji: "✈️", count: 6 },
+  distress:         { name: "Distress & Anxiety", emoji: "💙", count: 7 },
+  forgiveness:      { name: "Forgiveness",        emoji: "🤍", count: 5 },
+  illness:          { name: "Illness & Healing",  emoji: "💊", count: 5 },
+  guidance:         { name: "Guidance",           emoji: "🧭", count: 3 },
+  protection:       { name: "Protection",         emoji: "🛡️", count: 4 },
+  dhikr:            { name: "Dhikr",              emoji: "📖", count: 6 },
+  knowledge:        { name: "Knowledge",          emoji: "📚", count: 3 },
+  gratitude:        { name: "Gratitude",          emoji: "🌸", count: 3 },
+  marriage:         { name: "Marriage & Family",  emoji: "👨‍👩‍👧", count: 4 },
+  hajj:             { name: "Hajj & Umrah",       emoji: "🕋", count: 4 },
+  grief:            { name: "Grief & Loss",       emoji: "🤲", count: 4 },
+  children:         { name: "Children",           emoji: "👶", count: 4 },
+  night_prayer:     { name: "Night Prayer",       emoji: "⭐", count: 4 },
+  quran_recitation: { name: "Quran Recitation",   emoji: "📜", count: 3 },
 };
 const DUA_KEYS = Object.keys(DUAS);
 
 // ─────────────────────────────────────────────────────
-//  SURAH NAME → NUMBER lookup
+//  SURAH LOOKUP
 // ─────────────────────────────────────────────────────
 const SURAH_NAMES = [
   "Al-Fatihah","Al-Baqarah","Ali 'Imran","An-Nisa","Al-Ma'idah","Al-An'am","Al-A'raf","Al-Anfal","At-Tawbah","Yunus",
@@ -124,84 +175,37 @@ const SURAH_NAMES = [
   "Al-Qari'ah","At-Takathur","Al-Asr","Al-Humazah","Al-Fil","Quraysh","Al-Ma'un","Al-Kawthar","Al-Kafirun","An-Nasr",
   "Al-Masad","Al-Ikhlas","Al-Falaq","An-Nas",
 ];
-
 const SURAH_ALIASES = {
-  "fatiha":1,"fatihah":1,"opening":1,
-  "baqara":2,"baqarah":2,"cow":2,
-  "imran":3,"al imran":3,
-  "nisa":4,"nisaa":4,"women":4,
-  "maidah":5,"maida":5,"table":5,
-  "anam":6,"cattle":6,
-  "araf":7,"heights":7,
-  "anfal":8,"spoils":8,
-  "tawba":9,"tawbah":9,"repentance":9,
-  "yunus":10,"hud":11,"yusuf":12,
-  "rad":13,"thunder":13,"ibrahim":14,"hijr":15,
-  "nahl":16,"bee":16,
-  "isra":17,"night journey":17,
-  "kahf":18,"cave":18,
-  "maryam":19,"mary":19,"taha":20,
-  "anbiya":21,"prophets":21,
-  "hajj":22,"pilgrimage":22,
-  "muminun":23,"nur":24,"light":24,
-  "furqan":25,"shuara":26,"poets":26,
-  "naml":27,"ant":27,"ants":27,
-  "qasas":28,"stories":28,
-  "ankabut":29,"spider":29,
-  "rum":30,"romans":30,
-  "luqman":31,"sajdah":32,"prostration":32,
-  "ahzab":33,"saba":34,"fatir":35,
-  "yasin":36,"ya sin":36,"ya-sin":36,
-  "saffat":37,"sad":38,
-  "zumar":39,"groups":39,
-  "ghafir":40,"mumin":40,
-  "fussilat":41,"shura":42,"zukhruf":43,
-  "dukhan":44,"smoke":44,
-  "jathiyah":45,"ahqaf":46,
-  "muhammad":47,"fath":48,"victory":48,
-  "hujurat":49,"qaf":50,"dhariyat":51,
-  "tur":52,"mount":52,
-  "najm":53,"star":53,
-  "qamar":54,"moon":54,
-  "rahman":55,"ar rahman":55,
-  "waqiah":56,"hadid":57,"iron":57,
-  "mujadila":58,"hashr":59,
-  "mumtahanah":60,"saf":61,
-  "jumuah":62,"friday":62,
-  "munafiqun":63,"taghabun":64,
-  "talaq":65,"divorce":65,
-  "tahrim":66,"mulk":67,"dominion":67,
-  "qalam":68,"pen":68,
-  "haqqah":69,"maarij":70,
-  "nuh":71,"noah":71,
-  "jinn":72,"muzzammil":73,"muddaththir":74,
-  "qiyamah":75,"resurrection":75,
-  "insan":76,"human":76,
-  "mursalat":77,"naba":78,
-  "naziat":79,"abasa":80,
-  "takwir":81,"infitar":82,
-  "mutaffifin":83,"inshiqaq":84,
-  "buruj":85,"tariq":86,
-  "ala":87,"most high":87,
-  "ghashiyah":88,"fajr":89,"dawn":89,
-  "balad":90,"shams":91,"sun":91,
-  "layl":92,"night":92,
-  "duha":93,"sharh":94,"inshirah":94,
-  "tin":95,"fig":95,
-  "alaq":96,"clot":96,"iqra":96,
-  "qadr":97,"power":97,
-  "bayyinah":98,"zalzalah":99,"earthquake":99,
-  "adiyat":100,"qariah":101,
-  "takathur":102,"asr":103,"time":103,
-  "humazah":104,"fil":105,"elephant":105,
-  "quraysh":106,"maun":107,
-  "kawthar":108,"abundance":108,
-  "kafirun":109,"disbelievers":109,
-  "nasr":110,"masad":111,"lahab":111,
-  "ikhlas":112,"sincerity":112,"tawhid":112,
+  "fatiha":1,"fatihah":1,"opening":1,"baqara":2,"baqarah":2,"cow":2,"imran":3,"al imran":3,
+  "nisa":4,"nisaa":4,"women":4,"maidah":5,"maida":5,"table":5,"anam":6,"cattle":6,
+  "araf":7,"heights":7,"anfal":8,"spoils":8,"tawba":9,"tawbah":9,"repentance":9,
+  "yunus":10,"hud":11,"yusuf":12,"rad":13,"thunder":13,"ibrahim":14,"hijr":15,
+  "nahl":16,"bee":16,"isra":17,"night journey":17,"kahf":18,"cave":18,
+  "maryam":19,"mary":19,"taha":20,"anbiya":21,"prophets":21,"hajj":22,"pilgrimage":22,
+  "muminun":23,"nur":24,"light":24,"furqan":25,"shuara":26,"poets":26,
+  "naml":27,"ant":27,"ants":27,"qasas":28,"stories":28,"ankabut":29,"spider":29,
+  "rum":30,"romans":30,"luqman":31,"sajdah":32,"prostration":32,"ahzab":33,
+  "saba":34,"fatir":35,"yasin":36,"ya sin":36,"ya-sin":36,"saffat":37,"sad":38,
+  "zumar":39,"groups":39,"ghafir":40,"mumin":40,"fussilat":41,"shura":42,
+  "zukhruf":43,"dukhan":44,"smoke":44,"jathiyah":45,"ahqaf":46,"muhammad":47,
+  "fath":48,"victory":48,"hujurat":49,"qaf":50,"dhariyat":51,"tur":52,"mount":52,
+  "najm":53,"star":53,"qamar":54,"moon":54,"rahman":55,"ar rahman":55,
+  "waqiah":56,"hadid":57,"iron":57,"mujadila":58,"hashr":59,"mumtahanah":60,
+  "saf":61,"jumuah":62,"friday":62,"munafiqun":63,"taghabun":64,"talaq":65,
+  "divorce":65,"tahrim":66,"mulk":67,"dominion":67,"qalam":68,"pen":68,
+  "haqqah":69,"maarij":70,"nuh":71,"noah":71,"jinn":72,"muzzammil":73,
+  "muddaththir":74,"qiyamah":75,"resurrection":75,"insan":76,"human":76,
+  "mursalat":77,"naba":78,"naziat":79,"abasa":80,"takwir":81,"infitar":82,
+  "mutaffifin":83,"inshiqaq":84,"buruj":85,"tariq":86,"ala":87,"most high":87,
+  "ghashiyah":88,"fajr":89,"dawn":89,"balad":90,"shams":91,"sun":91,
+  "layl":92,"night":92,"duha":93,"sharh":94,"inshirah":94,"tin":95,"fig":95,
+  "alaq":96,"clot":96,"iqra":96,"qadr":97,"power":97,"bayyinah":98,
+  "zalzalah":99,"earthquake":99,"adiyat":100,"qariah":101,"takathur":102,
+  "asr":103,"time":103,"humazah":104,"fil":105,"elephant":105,"quraysh":106,
+  "maun":107,"kawthar":108,"abundance":108,"kafirun":109,"disbelievers":109,
+  "nasr":110,"masad":111,"lahab":111,"ikhlas":112,"sincerity":112,"tawhid":112,
   "falaq":113,"nas":114,"mankind":114,
 };
-
 function resolveSurah(input) {
   if (!input) return null;
   const n = parseInt(input);
@@ -252,64 +256,92 @@ function clean(s) {
     .replace(/&nbsp;/g," ").replace(/&#39;/g,"'").replace(/&quot;/g,'"')
     .trim();
 }
-
 function truncate(s, max = 3800) {
   if (!s) return "";
   return s.length > max ? s.substring(0, max) + "\n*(truncated…)*" : s;
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SUNNAH.COM API — HADITH BACKEND
+//  FAWAZAHMED0 HADITH API
+//
+//  Confirmed live response (eng-abudawud/1035):
+//  {
+//    metadata: { name, section: { "2": "Prayer (Kitab Al-Salat)" } },
+//    hadiths: [{
+//      hadithnumber: 1035, arabicnumber: 1035,
+//      text: "English text…",
+//      grades: [{ name: "Al-Albani", grade: "Sahih" }, …],
+//      reference: { book: 2, hadith: 646 }
+//    }]
+//  }
 // ═══════════════════════════════════════════════════════════════
 
-async function sunnahFetch(path) {
-  const res = await fetch(`${SUNNAH}${path}`, {
-    headers: { "x-api-key": SUNNAH_KEY },
-  });
-  if (!res.ok) throw new Error(`sunnah.com HTTP ${res.status} — ${path}`);
+async function fawazFetch(edition, number) {
+  const url = `${FAWAZ}/${edition}/${number}.json`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fawaz HTTP ${res.status} — ${url}`);
   return res.json();
 }
 
-async function fetchHadith(colKey, number) {
-  const col  = COLLECTIONS[colKey];
-  const data = await sunnahFetch(`/collections/${col.collectionId}/hadiths/${number}`);
+function parseHadith(engData, araData, colKey) {
+  // Pull the first (and only) hadith from the array
+  const h = engData.hadiths?.[0];
+  const a = araData?.hadiths?.[0];
 
-  const h = data.data ?? data;
+  if (!h) throw new Error(`fawaz returned no hadiths for ${colKey}`);
 
-  const english   = clean(h.text ?? h.body ?? "");
-  const arabic    = clean(h.arabicText ?? h.arabic ?? "");
-  const num       = `${h.hadithNumber ?? number}`;
-  const grades    = h.grades ?? [];
-  const bookName  = h.book?.bookName ?? h.book?.book ?? "";
-  const bookNum   = h.book?.bookNumber ?? "";
-  const chapter   = h.chapter?.chapterEnglish ?? h.chapter?.chapter_english ?? "";
-  const chapterAr = h.chapter?.chapterArabic  ?? h.chapter?.chapter_arabic  ?? "";
+  const english = clean(h.text ?? "");
+  const arabic  = clean(a?.text ?? "");
+  const number  = String(h.hadithnumber ?? h.arabicnumber ?? "?");
+
+  // ── GRADES ──────────────────────────────────────────────────
+  // grades: [{ name: "Al-Albani", grade: "Sahih" }, …]
+  const grades = Array.isArray(h.grades) ? h.grades : [];
 
   let finalGrade, allGrades;
-  const ALWAYS_SAHIH = new Set(["bukhari", "muslim"]);
 
-  if (grades.length === 0 && ALWAYS_SAHIH.has(colKey)) {
+  if (ALWAYS_SAHIH.has(colKey)) {
+    // Bukhari & Muslim: no per-hadith grades in fawaz, universally accepted
     finalGrade = "Sahih";
     allGrades  = "🟢 **Sahih** *(Agreed Upon — Muttafaqun Alayh)*";
   } else if (grades.length > 0) {
-    const primary = grades.find(g => /albani/i.test(g.graded_by ?? g.gradedBy ?? "")) ?? grades[0];
-    finalGrade    = normalGrade(primary.grade);
-    allGrades     = grades.map(g => {
-      const gMeta = GRADE_META[normalGrade(g.grade)];
-      const emoji = gMeta?.emoji ?? "⚪";
-      const by    = g.graded_by ?? g.gradedBy ?? "Unknown";
-      return `${emoji} **${by}**: ${g.grade}`;
+    // Use Al-Albani as primary if present, else first scholar
+    const primary  = grades.find(g => /albani/i.test(g.name ?? "")) ?? grades[0];
+    finalGrade     = normalGrade(primary.grade);
+
+    // Build a per-scholar grade list with coloured emojis
+    allGrades = grades.map(g => {
+      const norm  = normalGrade(g.grade);
+      const emoji = GRADE_META[norm]?.emoji ?? "⚪";
+      // Some grades have long reference strings (e.g. "Sahih Bukhari (1224)") — keep them
+      return `${emoji} **${g.name}**: ${g.grade}`;
     }).join("\n");
   } else {
     finalGrade = null;
     allGrades  = null;
   }
 
-  const ref = bookNum
-    ? `Book ${bookNum}${h.hadithNumber ? `, Hadith ${h.hadithNumber}` : ""}`
+  // ── SECTION / CHAPTER ──────────────────────────────────────
+  // section is an object like { "2": "Prayer (Kitab Al-Salat)" }
+  const sectionObj = engData.metadata?.section ?? {};
+  const section    = Object.values(sectionObj)[0] ?? null;
+
+  // ── BOOK REFERENCE ──────────────────────────────────────────
+  const ref = h.reference
+    ? `Book ${h.reference.book}, Hadith ${h.reference.hadith}`
     : null;
 
-  return { colKey, number: num, english, arabic, grade: finalGrade, allGrades, section: chapter, sectionAr: chapterAr, bookName, ref };
+  return { colKey, number, english, arabic, grade: finalGrade, allGrades, section, ref };
+}
+
+async function fetchHadith(colKey, number) {
+  const col = COLLECTIONS[colKey];
+  const [eng, ara] = await Promise.allSettled([
+    fawazFetch(col.fawaz_eng, number),
+    fawazFetch(col.fawaz_ara, number),
+  ]);
+  if (eng.status === "rejected") throw eng.reason;
+  return parseHadith(eng.value, ara.status === "fulfilled" ? ara.value : null, colKey);
 }
 
 async function fetchRandomHadith(colKey) {
@@ -319,19 +351,8 @@ async function fetchRandomHadith(colKey) {
   return fetchHadith(key, num);
 }
 
-async function fetchCollectionsList() {
-  const data = await sunnahFetch("/collections?limit=20");
-  return data.data ?? data;
-}
-
-async function fetchBooks(colKey) {
-  const col  = COLLECTIONS[colKey];
-  const data = await sunnahFetch(`/collections/${col.collectionId}/books?limit=100`);
-  return data.data ?? data;
-}
-
 // ═══════════════════════════════════════════════════════════════
-//  QURAN  (AlQuran Cloud)
+//  QURAN  (AlQuran Cloud — unchanged)
 // ═══════════════════════════════════════════════════════════════
 async function fetchAyah(surahN, ayahN, trKey = DEFAULT_TR) {
   const ed  = TRANSLATIONS[trKey]?.edition ?? TRANSLATIONS[DEFAULT_TR].edition;
@@ -343,15 +364,11 @@ async function fetchAyah(surahN, ayahN, trKey = DEFAULT_TR) {
   const tr = json.data.find(d => d.edition.identifier === ed);
   if (!ar || !tr) throw new Error("AlQuran bad response");
   return {
-    surahName: ar.surah.englishName,
-    surahArabic: ar.surah.name,
-    surahNum: ar.surah.number,
-    ayahNum: ar.numberInSurah,
+    surahName: ar.surah.englishName, surahArabic: ar.surah.name,
+    surahNum: ar.surah.number, ayahNum: ar.numberInSurah,
     totalAyahs: ar.surah.numberOfAyahs,
-    arabic: ar.text,
-    translation: clean(tr.text),
-    page: ar.page,
-    juz: ar.juz,
+    arabic: ar.text, translation: clean(tr.text),
+    page: ar.page, juz: ar.juz,
   };
 }
 
@@ -365,20 +382,16 @@ async function fetchRandomAyah(trKey = DEFAULT_TR) {
   const tr = json.data.find(d => d.edition.identifier === ed);
   if (!ar || !tr) throw new Error("AlQuran bad response");
   return {
-    surahName: ar.surah.englishName,
-    surahArabic: ar.surah.name,
-    surahNum: ar.surah.number,
-    ayahNum: ar.numberInSurah,
+    surahName: ar.surah.englishName, surahArabic: ar.surah.name,
+    surahNum: ar.surah.number, ayahNum: ar.numberInSurah,
     totalAyahs: ar.surah.numberOfAyahs,
-    arabic: ar.text,
-    translation: clean(tr.text),
-    page: ar.page,
-    juz: ar.juz,
+    arabic: ar.text, translation: clean(tr.text),
+    page: ar.page, juz: ar.juz,
   };
 }
 
 async function fetchSurah(surahN, trKey = DEFAULT_TR) {
-  const ed  = TRANSLATIONS[trKey]?.edition ?? TRANSLATIONS[DEFAULT_TR].edition;
+  const ed = TRANSLATIONS[trKey]?.edition ?? TRANSLATIONS[DEFAULT_TR].edition;
   const [infoRes, firstRes] = await Promise.all([
     fetch(`${QURAN}/surah/${surahN}`),
     fetch(`${QURAN}/ayah/${surahN}:1/editions/quran-uthmani,${ed}`),
@@ -395,18 +408,14 @@ async function fetchSurah(surahN, trKey = DEFAULT_TR) {
     }
   }
   return {
-    number: info.number,
-    nameArabic: info.name,
-    nameEnglish: info.englishName,
-    meaning: info.englishNameTranslation,
-    revelation: info.revelationType,
-    totalAyahs: info.numberOfAyahs,
-    first,
+    number: info.number, nameArabic: info.name, nameEnglish: info.englishName,
+    meaning: info.englishNameTranslation, revelation: info.revelationType,
+    totalAyahs: info.numberOfAyahs, first,
   };
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  UMMAHAPI  (Tafsir · Dua · Asma · Hijri)
+//  UMMAHAPI  (Tafsir · Dua · Asma · Hijri — unchanged)
 // ═══════════════════════════════════════════════════════════════
 async function ummahFetch(path) {
   const res  = await fetch(`${UMMAH}${path}`);
@@ -418,8 +427,8 @@ async function ummahFetch(path) {
 const getTafsir    = (k,s,a) => ummahFetch(`/tafsir/${k}/surah/${s}/ayah/${a}`);
 const getRandomDua = ()       => ummahFetch("/duas/random");
 const getDuasByCat = c        => ummahFetch(`/duas/category/${c}`);
-const getAllAsma   = ()        => ummahFetch("/asma-ul-husna");
-const getHijri     = ()        => ummahFetch("/today-hijri");
+const getAllAsma    = ()       => ummahFetch("/asma-ul-husna");
+const getHijri     = ()       => ummahFetch("/today-hijri");
 
 // ═══════════════════════════════════════════════════════════════
 //  EMBED BUILDERS
@@ -428,29 +437,28 @@ function hadithEmbed(h, showArabic = false) {
   const col = COLLECTIONS[h.colKey];
   const g   = h.grade ? (GRADE_META[h.grade] || { label: h.grade, emoji: "⚪", color: null }) : null;
 
-  const englishText = truncate(h.english || "Translation unavailable.", 3800);
-
   const embed = new EmbedBuilder()
     .setColor(g?.color ?? col.color)
     .setAuthor({ name: `${col.emoji}  ${col.name}  •  Hadith #${h.number}` })
-    .setDescription(`*"${englishText}"*`)
-    .setFooter({ text: "sunnah.com API • لا علم إلا ما علَّم الله" })
+    .setDescription(`*"${truncate(h.english || "Translation unavailable.", 3800)}"*`)
+    .setFooter({ text: "fawazahmed0 CDN • لا علم إلا ما علَّم الله" })
     .setTimestamp();
 
+  // Grade field — shows all scholars if available
   if (g) {
     embed.addFields({
-      name: "📊 Grade",
-      value: h.allGrades ? h.allGrades.substring(0, 1000) : `${g.emoji} **${g.label}**`,
+      name:   "📊 Grade",
+      value:  h.allGrades ? h.allGrades.substring(0, 1000) : `${g.emoji} **${g.label}**`,
       inline: false,
     });
   }
+
   embed.addFields(
     { name: "📖 Collection", value: col.name,       inline: true },
     { name: "🔢 Number",     value: `#${h.number}`, inline: true }
   );
-  if (h.bookName) embed.addFields({ name: "📚 Book", value: h.bookName, inline: true });
-  if (h.section)  embed.addFields({ name: "📑 Chapter", value: truncate(h.section, 256), inline: false });
-  if (h.ref)      embed.addFields({ name: "🔗 Reference", value: h.ref, inline: true });
+  if (h.ref)     embed.addFields({ name: "🔗 Reference", value: h.ref,                         inline: true });
+  if (h.section) embed.addFields({ name: "📑 Chapter",   value: truncate(h.section, 256),      inline: false });
   if (showArabic && h.arabic) {
     embed.addFields({ name: "🕌 Arabic", value: `\`\`\`${truncate(h.arabic, 1000)}\`\`\`` });
   }
@@ -475,21 +483,21 @@ function ayahEmbed(v, trKey = DEFAULT_TR) {
 }
 
 function surahEmbed(s, trKey = DEFAULT_TR) {
-  const tr    = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
-  const icon  = s.revelation === "Meccan" ? "🕋" : "🕌";
+  const tr   = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
+  const icon = s.revelation === "Meccan" ? "🕋" : "🕌";
   const embed = new EmbedBuilder()
     .setColor(0x00695C)
     .setTitle(`${icon}  Surah ${s.number} — ${s.nameEnglish}  (${s.nameArabic})`)
     .addFields(
-      { name: "💬 Meaning",      value: s.meaning || "—",             inline: true },
-      { name: "📍 Revelation",   value: `${icon} ${s.revelation}`,    inline: true },
-      { name: "🔢 Total Ayahs",  value: `${s.totalAyahs}`,            inline: true },
-      { name: "🌐 Translation",  value: `${tr.flag} ${tr.name}`,      inline: true },
+      { name: "💬 Meaning",     value: s.meaning || "—",           inline: true },
+      { name: "📍 Revelation",  value: `${icon} ${s.revelation}`,  inline: true },
+      { name: "🔢 Total Ayahs", value: `${s.totalAyahs}`,          inline: true },
+      { name: "🌐 Translation", value: `${tr.flag} ${tr.name}`,    inline: true },
     );
   if (s.first) {
     embed.addFields(
-      { name: "🕌 First Ayah (Arabic)", value: s.first.arabic, inline: false },
-      { name: "📖 Translation",         value: `*"${s.first.translation}"*`, inline: false }
+      { name: "🕌 First Ayah (Arabic)", value: s.first.arabic,                     inline: false },
+      { name: "📖 Translation",         value: `*"${s.first.translation}"*`,        inline: false }
     );
   }
   embed.setFooter({ text: "القرآن الكريم — AlQuran Cloud" }).setTimestamp();
@@ -533,9 +541,9 @@ function asmaEmbed(name) {
     .setTitle(`${name.arabic}  •  ${name.transliteration}`)
     .setDescription(`**"${name.meaning}"**\n\n${name.description || ""}`)
     .addFields(
-      { name: "🔢 Number",          value: `${name.number}/99`,   inline: true },
-      { name: "🔤 Transliteration", value: name.transliteration,  inline: true },
-      { name: "💬 Meaning",         value: name.meaning,          inline: true }
+      { name: "🔢 Number",          value: `${name.number}/99`,  inline: true },
+      { name: "🔤 Transliteration", value: name.transliteration, inline: true },
+      { name: "💬 Meaning",         value: name.meaning,         inline: true }
     )
     .setFooter({ text: "وَلِلَّهِ الْأَسْمَاءُ الْحُسْنَىٰ — (7:180)" }).setTimestamp();
 }
@@ -544,8 +552,8 @@ function hijriEmbed(data) {
   const { hijri: h, gregorian: g } = data;
   return new EmbedBuilder().setColor(0x3E2723).setTitle("🌙  Today's Islamic Date")
     .addFields(
-      { name: "🗓️ Hijri Date",     value: `**${h.day} ${h.month_name} ${h.year} AH**`, inline: false },
-      { name: "📅 Gregorian Date", value: g.formatted || `${g.day}/${g.month}/${g.year}`, inline: false }
+      { name: "🗓️ Hijri Date",     value: `**${h.day} ${h.month_name} ${h.year} AH**`,      inline: false },
+      { name: "📅 Gregorian Date", value: g.formatted || `${g.day}/${g.month}/${g.year}`,    inline: false }
     )
     .setFooter({ text: "UmmahAPI • Hijri Calendar" }).setTimestamp();
 }
@@ -569,6 +577,7 @@ function colMenu() {
   );
 }
 
+// customId: {code}|{colKey}|{num}  — pipe prevents colKey split issues
 function hadithBtns(colKey, num, showArabic = false) {
   const col  = COLLECTIONS[colKey];
   const n    = parseInt(num) || 1;
@@ -616,7 +625,8 @@ function tafsirMenu(s, a) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder().setCustomId("stf").setPlaceholder("📚 Choose a Tafsir…")
       .addOptions(Object.entries(TAFSIRS).map(([k, v]) => ({
-        label: `${v.flag} ${v.name}`, description: `${v.scholar} • ${v.lang}`, value: `${k}|${s}|${a}`,
+        label: `${v.flag} ${v.name}`, description: `${v.scholar} • ${v.lang}`,
+        value: `${k}|${s}|${a}`,
       })))
   );
 }
@@ -715,12 +725,10 @@ client.once("ready", async () => {
 // ═══════════════════════════════════════════════════════════════
 client.on("interactionCreate", async interaction => {
 
-  // ── SLASH COMMANDS ──────────────────────────────────────────
   if (interaction.isChatInputCommand()) {
     await interaction.deferReply();
     const cmd = interaction.commandName;
 
-    // /hadith
     if (cmd === "hadith") {
       const colKey = interaction.options.getString("collection");
       const num    = interaction.options.getInteger("number");
@@ -735,7 +743,6 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    // /random
     else if (cmd === "random") {
       const colKey = interaction.options.getString("collection") || null;
       try {
@@ -748,7 +755,6 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    // /ayah
     else if (cmd === "ayah") {
       const surahIn = interaction.options.getString("surah");
       const ayahN   = interaction.options.getInteger("ayah");
@@ -761,11 +767,10 @@ client.on("interactionCreate", async interaction => {
         await interaction.editReply({ embeds: [ayahEmbed(v, trKey)], components: [tranMenu(trKey, surahN, ayahN, v.totalAyahs), ayahBtns(surahN, ayahN, v.totalAyahs, trKey)] });
       } catch(e) {
         console.error(e);
-        await interaction.editReply({ embeds: [errEmbed(`Could not load ${surahN}:${ayahN}. The ayah may not exist in this surah.`)] });
+        await interaction.editReply({ embeds: [errEmbed(`Could not load ${surahN}:${ayahN}.`)] });
       }
     }
 
-    // /surah
     else if (cmd === "surah") {
       const surahIn = interaction.options.getString("surah");
       const trKey   = interaction.options.getString("translation") || DEFAULT_TR;
@@ -781,7 +786,6 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    // /randomayah
     else if (cmd === "randomayah") {
       const trKey = interaction.options.getString("translation") || DEFAULT_TR;
       try {
@@ -793,12 +797,11 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    // /tafsir
     else if (cmd === "tafsir") {
-      const surahIn  = interaction.options.getString("surah");
-      const ayahN    = interaction.options.getInteger("ayah");
-      const tafsirK  = interaction.options.getString("scholar") || "ibn_kathir";
-      const surahN   = resolveSurah(surahIn);
+      const surahIn = interaction.options.getString("surah");
+      const ayahN   = interaction.options.getInteger("ayah");
+      const tafsirK = interaction.options.getString("scholar") || "ibn_kathir";
+      const surahN  = resolveSurah(surahIn);
       if (!surahN)
         return interaction.editReply({ embeds: [errEmbed(`Cannot find surah **"${surahIn}"**.`)] });
       try {
@@ -810,7 +813,6 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    // /dua
     else if (cmd === "dua") {
       const cat = interaction.options.getString("category");
       try {
@@ -828,7 +830,6 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    // /asmaallah
     else if (cmd === "asmaallah") {
       const num = interaction.options.getInteger("number") || 1;
       try {
@@ -843,7 +844,6 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    // /hijri
     else if (cmd === "hijri") {
       try {
         await interaction.editReply({ embeds: [hijriEmbed(await getHijri())] });
@@ -853,16 +853,15 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    // /daily
     else if (cmd === "daily") {
       try {
         const [h, v, dua, hijri] = await Promise.all([
           fetchRandomHadith(null), fetchRandomAyah(DEFAULT_TR),
           getRandomDua(), getHijri().catch(() => null),
         ]);
-        const hE = hadithEmbed(h);  hE.setTitle("🌅  Daily Hadith");
-        const aE = ayahEmbed(v);    aE.setTitle("📖  Daily Ayah");
-        const dE = duaEmbed(dua);   dE.setTitle("🤲  Daily Dua");
+        const hE = hadithEmbed(h); hE.setTitle("🌅  Daily Hadith");
+        const aE = ayahEmbed(v);   aE.setTitle("📖  Daily Ayah");
+        const dE = duaEmbed(dua);  dE.setTitle("🤲  Daily Dua");
         await interaction.editReply({ embeds: hijri ? [hijriEmbed(hijri), hE, aE, dE] : [hE, aE, dE] });
       } catch(e) {
         console.error(e);
@@ -870,7 +869,6 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    // /collections
     else if (cmd === "collections") {
       const lines = COL_KEYS.map(k => {
         const c = COLLECTIONS[k];
@@ -880,11 +878,10 @@ client.on("interactionCreate", async interaction => {
       await interaction.editReply({ embeds: [
         new EmbedBuilder().setColor(0x5C4033).setTitle("📚  Hadith Collections")
           .setDescription(lines.join("\n") + `\n\n**Total: ${total.toLocaleString()} across ${COL_KEYS.length} collections**`)
-          .setFooter({ text: "sunnah.com API — Powered by sunnah.com" })
+          .setFooter({ text: "fawazahmed0 CDN — free, no API key needed" })
       ]});
     }
 
-    // /explore
     else if (cmd === "explore") {
       await interaction.editReply({ embeds: [
         new EmbedBuilder().setColor(0x4E342E).setTitle("📚  Hadith Explorer")
@@ -897,7 +894,6 @@ client.on("interactionCreate", async interaction => {
     }
   }
 
-  // ── SELECT MENUS ──────────────────────────────────────────
   else if (interaction.isStringSelectMenu()) {
     const cid = interaction.customId;
 
@@ -950,11 +946,9 @@ client.on("interactionCreate", async interaction => {
     }
   }
 
-  // ── BUTTONS ───────────────────────────────────────────────
   else if (interaction.isButton()) {
     const id = interaction.customId;
 
-    // hadith nav  hp|colKey|num  hn|..  hr|..  ha|..
     if (/^h[pnra]\|/.test(id)) {
       await interaction.deferUpdate();
       const [code, colKey, numStr] = id.split("|");
@@ -972,11 +966,9 @@ client.on("interactionCreate", async interaction => {
 
     else if (id.startsWith("ap_") || id.startsWith("an_")) {
       await interaction.deferUpdate();
-      const parts  = id.split("_");
-      const s      = parseInt(parts[1]);
-      const a      = parseInt(parts[2]);
-      const max    = parseInt(parts[3])||300;
-      const trKey  = parts.slice(4).join("_") || DEFAULT_TR;
+      const parts = id.split("_");
+      const s = parseInt(parts[1]), a = parseInt(parts[2]), max = parseInt(parts[3])||300;
+      const trKey = parts.slice(4).join("_") || DEFAULT_TR;
       try {
         const v = await fetchAyah(s, a, trKey);
         await interaction.editReply({ embeds: [ayahEmbed(v, trKey)], components: [tranMenu(trKey, s, a, max), ayahBtns(s, a, max, trKey)] });
@@ -1000,7 +992,6 @@ client.on("interactionCreate", async interaction => {
       await interaction.deferUpdate();
       const code  = id.substring(0, 2);
       const parts = id.split("_");
-
       if (code === "sa") {
         const surahN = parseInt(parts[1]);
         const trKey  = parts.slice(2).join("_") || DEFAULT_TR;
@@ -1012,13 +1003,8 @@ client.on("interactionCreate", async interaction => {
         }
         return;
       }
-
-      const surahN = code === "sr"
-        ? Math.floor(Math.random() * 114) + 1
-        : parseInt(parts[1]);
-      const trKey  = code === "sr"
-        ? parts.slice(1).join("_") || DEFAULT_TR
-        : parts.slice(2).join("_") || DEFAULT_TR;
+      const surahN = code === "sr" ? Math.floor(Math.random() * 114) + 1 : parseInt(parts[1]);
+      const trKey  = code === "sr" ? parts.slice(1).join("_") || DEFAULT_TR : parts.slice(2).join("_") || DEFAULT_TR;
       try {
         const s = await fetchSurah(surahN, trKey);
         await interaction.editReply({ embeds: [surahEmbed(s, trKey)], components: [surahBtns(surahN, trKey)] });
@@ -1042,8 +1028,7 @@ client.on("interactionCreate", async interaction => {
     else if (id.startsWith("dp_") || id.startsWith("dn_")) {
       await interaction.deferUpdate();
       const parts = id.split("_");
-      const cat   = parts[1];
-      const idx   = parseInt(parts[2]);
+      const cat = parts[1], idx = parseInt(parts[2]);
       try {
         const resp = await getDuasByCat(cat);
         const duas = Array.isArray(resp) ? resp : (resp.duas||[]);
@@ -1080,116 +1065,74 @@ client.on("interactionCreate", async interaction => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  AUTO VERSE DETECTION  (BibleBot-style)
+//  AUTO VERSE DETECTION  (BibleBot-style — type 2:255 or Baqarah 2:255)
 // ═══════════════════════════════════════════════════════════════
-
-const MAX_AUTO_VERSES = 3;
-
 const SURAH_MAX_AYAH = [
-  0,7,286,200,176,120,165,206,75,129,109,
-  123,111,43,52,99,128,111,110,98,135,
-  112,78,118,64,77,227,93,88,69,60,
-  34,30,73,54,45,83,182,88,75,85,
-  54,53,89,59,37,35,38,29,18,45,
-  60,49,62,55,78,96,29,22,24,13,
-  14,11,11,18,12,12,30,52,52,44,
-  28,28,20,56,40,31,50,40,46,42,
-  29,19,36,25,22,17,19,26,30,20,
-  15,21,11,8,8,19,5,8,8,11,
-  11,8,3,9,5,4,7,3,6,3,
-  5,4,5,4,
+  0,7,286,200,176,120,165,206,75,129,109,123,111,43,52,99,128,111,110,98,135,
+  112,78,118,64,77,227,93,88,69,60,34,30,73,54,45,83,182,88,75,85,54,53,89,
+  59,37,35,38,29,18,45,60,49,62,55,78,96,29,22,24,13,14,11,11,18,12,12,30,
+  52,52,44,28,28,20,56,40,31,50,40,46,42,29,19,36,25,22,17,19,26,30,20,15,
+  21,11,8,8,19,5,8,8,11,11,8,3,9,5,4,7,3,6,3,5,4,5,4,
 ];
-
-function isValidAyah(surahN, ayahN) {
-  return surahN >= 1 && surahN <= 114 && ayahN >= 1 && ayahN <= (SURAH_MAX_AYAH[surahN] || 286);
+function isValidAyah(s, a) {
+  return s >= 1 && s <= 114 && a >= 1 && a <= (SURAH_MAX_AYAH[s] || 286);
 }
 
 const VERSE_PATTERN = /\[?(?:([\w\u0600-\u06FF''\-\u2019 ]{2,40})\s+)?(\d{1,3}):(\d{1,3})(?:-\d{1,3})?\]?/g;
 
 function autoAyahEmbed(v, trKey = DEFAULT_TR) {
-  const tr  = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
-  const ref = `${v.surahName} ${v.surahNum}:${v.ayahNum}`;
+  const tr = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
   return new EmbedBuilder()
     .setColor(0x1B5E20)
-    .setTitle(`${ref}  —  ${tr.flag} ${tr.name}`)
-    .setDescription(
-      `**<${v.ayahNum}>** ${v.translation || "Translation unavailable."}\n\n` +
-      `> ${v.arabic}`
-    )
-    .setFooter({
-      text: `${v.surahName} (${v.surahArabic}) • ${v.surahNum}:${v.ayahNum}/${v.totalAyahs} • الإسلام بوت`,
-    });
+    .setTitle(`${v.surahName} ${v.surahNum}:${v.ayahNum}  —  ${tr.flag} ${tr.name}`)
+    .setDescription(`**<${v.ayahNum}>** ${v.translation || "Translation unavailable."}\n\n> ${v.arabic}`)
+    .setFooter({ text: `${v.surahName} (${v.surahArabic}) • ${v.surahNum}:${v.ayahNum}/${v.totalAyahs}` });
 }
 
 const autoVerseCooldown = new Map();
-const AUTO_VERSE_COOLDOWN_MS = 5000;
+const AUTO_COOLDOWN_MS  = 5000;
+const MAX_AUTO_VERSES   = 3;
 
 client.on("messageCreate", async message => {
   if (message.author.bot || message.webhookId) return;
-
-  const content = message.content;
-  if (!content || content.length < 3) return;
+  if (!message.content || message.content.length < 3) return;
 
   const now = Date.now();
-  if (now - (autoVerseCooldown.get(message.channelId) || 0) < AUTO_VERSE_COOLDOWN_MS) return;
+  if (now - (autoVerseCooldown.get(message.channelId) || 0) < AUTO_COOLDOWN_MS) return;
 
   const matches = [];
   let match;
   VERSE_PATTERN.lastIndex = 0;
 
-  while ((match = VERSE_PATTERN.exec(content)) !== null && matches.length < MAX_AUTO_VERSES) {
+  while ((match = VERSE_PATTERN.exec(message.content)) !== null && matches.length < MAX_AUTO_VERSES) {
     const rawName  = match[1]?.trim() || null;
     const numPart  = parseInt(match[2]);
     const ayahPart = parseInt(match[3]);
-
-    let surahN = null;
-
-    if (rawName) {
-      surahN = resolveSurah(rawName) ?? (numPart >= 1 && numPart <= 114 ? numPart : null);
-    } else {
-      surahN = numPart >= 1 && numPart <= 114 ? numPart : null;
-    }
-
+    let surahN = rawName
+      ? (resolveSurah(rawName) ?? (numPart >= 1 && numPart <= 114 ? numPart : null))
+      : (numPart >= 1 && numPart <= 114 ? numPart : null);
     if (!surahN || !isValidAyah(surahN, ayahPart)) continue;
-
     const key = `${surahN}:${ayahPart}`;
     if (matches.some(m => m.key === key)) continue;
     matches.push({ surahN, ayahN: ayahPart, key });
   }
 
   if (!matches.length) return;
-
   autoVerseCooldown.set(message.channelId, now);
 
-  const results = await Promise.allSettled(
-    matches.map(m => fetchAyah(m.surahN, m.ayahN, DEFAULT_TR))
-  );
-
-  const embeds = results
-    .filter(r => r.status === "fulfilled")
-    .map(r => autoAyahEmbed(r.value, DEFAULT_TR));
-
+  const results = await Promise.allSettled(matches.map(m => fetchAyah(m.surahN, m.ayahN, DEFAULT_TR)));
+  const embeds  = results.filter(r => r.status === "fulfilled").map(r => autoAyahEmbed(r.value));
   if (!embeds.length) return;
 
   try {
-    const reply = await message.reply({
-      embeds,
-      allowedMentions: { repliedUser: false },
-    });
-
-    // ♻️ react so author can delete the bot reply
+    const reply = await message.reply({ embeds, allowedMentions: { repliedUser: false } });
     await reply.react("♻️").catch(() => {});
-
-    const filter = (reaction, user) =>
-      reaction.emoji.name === "♻️" && user.id === message.author.id;
-
-    reply
-      .awaitReactions({ filter, max: 1, time: 60_000, errors: [] })
-      .then(collected => {
-        if (collected.size) reply.delete().catch(() => {});
-      });
-  } catch (e) {
-    console.error("autoVerse reply error:", e);
+    reply.awaitReactions({
+      filter: (reaction, user) => reaction.emoji.name === "♻️" && user.id === message.author.id,
+      max: 1, time: 60_000, errors: [],
+    }).then(collected => { if (collected.size) reply.delete().catch(() => {}); });
+  } catch(e) {
+    console.error("autoVerse error:", e);
   }
 });
 
@@ -1198,10 +1141,6 @@ client.on("messageCreate", async message => {
 // ═══════════════════════════════════════════════════════════════
 if (!process.env.DISCORD_TOKEN) {
   console.error("❌  DISCORD_TOKEN not set in .env");
-  process.exit(1);
-}
-if (!SUNNAH_KEY) {
-  console.error("❌  SUNNAH_API_KEY not set in .env");
   process.exit(1);
 }
 client.login(process.env.DISCORD_TOKEN);
