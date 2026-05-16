@@ -1292,9 +1292,9 @@ client.on("messageCreate", async message => {
 
   try {
     const reply = await message.reply({ embeds, allowedMentions: { repliedUser: false } });
-    await reply.react("♻️").catch(() => {});
+    await reply.react("1490332293544411336").catch(() => {});
     reply.awaitReactions({
-      filter: (reaction, user) => reaction.emoji.name === "♻️" && user.id === message.author.id,
+      filter: (reaction, user) => reaction.emoji.id === "1490332293544411336" && user.id === message.author.id,
       max: 1, time: 60_000, errors: [],
     }).then(collected => { if (collected.size) reply.delete().catch(() => {}); });
   } catch(e) {
