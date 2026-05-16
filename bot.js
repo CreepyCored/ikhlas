@@ -111,37 +111,37 @@ const UMMAH  = "https://ummahapi.com/api";
 const COLLECTIONS = {
   bukhari:  {
     name: "Sahih al-Bukhari", arabic: "صحيح البخاري",
-    color: 0x1B5E20, emoji: E.book, total: 7563,
+    color: 0x1B5E20, emoji: E.newspaper, total: 7563,
     fawaz_eng: "eng-bukhari",  fawaz_ara: "ara-bukhari",
   },
   muslim:   {
     name: "Sahih Muslim", arabic: "صحيح مسلم",
-    color: 0x0D47A1, emoji: E.book, total: 7470,
+    color: 0x0D47A1, emoji: E.newspaper, total: 7470,
     fawaz_eng: "eng-muslim",   fawaz_ara: "ara-muslim",
   },
   abudawud: {
     name: "Sunan Abu Dawud", arabic: "سنن أبي داود",
-    color: 0x4A148C, emoji: E.book, total: 5274,
+    color: 0x4A148C, emoji: E.newspaper, total: 5274,
     fawaz_eng: "eng-abudawud", fawaz_ara: "ara-abudawud",
   },
   tirmidhi: {
     name: "Jami at-Tirmidhi", arabic: "جامع الترمذي",
-    color: 0x880E4F, emoji: E.book, total: 3956,
+    color: 0x880E4F, emoji: E.newspaper, total: 3956,
     fawaz_eng: "eng-tirmidhi", fawaz_ara: "ara-tirmidhi",
   },
   ibnmajah: {
     name: "Sunan Ibn Majah", arabic: "سنن ابن ماجه",
-    color: 0x004D40, emoji: E.book, total: 4341,
+    color: 0x004D40, emoji: E.newspaper, total: 4341,
     fawaz_eng: "eng-ibnmajah", fawaz_ara: "ara-ibnmajah",
   },
   nasai:    {
     name: "Sunan an-Nasa'i", arabic: "سنن النسائي",
-    color: 0x37474F, emoji: E.book, total: 5761,
+    color: 0x37474F, emoji: E.newspaper, total: 5761,
     fawaz_eng: "eng-nasai",    fawaz_ara: "ara-nasai",
   },
   malik:    {
     name: "Muwatta Malik", arabic: "موطأ مالك",
-    color: 0x6D4C41, emoji: E.book, total: 1858,
+    color: 0x6D4C41, emoji: E.newspaper, total: 1858,
     fawaz_eng: "eng-malik",    fawaz_ara: "ara-malik",
   },
   nawawi40: {
