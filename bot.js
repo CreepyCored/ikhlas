@@ -557,7 +557,7 @@ function hadithEmbed(h, showArabic = false) {
 
   const embed = new EmbedBuilder()
     .setColor(g?.color ?? col.color)
-    .setTitle(`${col.emoji}  ${col.name}  •  Hadith #${h.number}`)
+    .setTitle(`${col.name}  •  Hadith #${h.number}`)
     .setDescription(`*"${truncate(h.english || "Translation unavailable.", 3800)}"*`)
     .setFooter({ text: "fawazahmed0 CDN • لا علم إلا ما علَّم الله" })
     .setTimestamp();
@@ -590,7 +590,7 @@ function ayahEmbed(v, trKey = DEFAULT_TR) {
 
   return new EmbedBuilder()
     .setColor(0x1B5E20)
-    .setTitle(`${v.surahName} ${v.surahNum}:${v.ayahNum}  —  ${tr.flag} ${tr.name}`)
+    .setTitle(`${v.surahName} ${v.surahNum}:${v.ayahNum}  —  ${tr.name}`)
     .setDescription(desc)
     .addFields(
       { name: `${E.book} Surah`,        value: `${v.surahName} (${v.surahArabic})`, inline: true },
@@ -698,7 +698,7 @@ function autoAyahEmbed(v, trKey = DEFAULT_TR) {
 
   return new EmbedBuilder()
     .setColor(0x1B5E20)
-    .setTitle(`${v.surahName} ${v.surahNum}:${v.ayahNum}  —  ${tr.flag} ${tr.name}`)
+    .setTitle(`${v.surahName} ${v.surahNum}:${v.ayahNum}  —  ${tr.name}`)
     .setDescription(desc)
     .addFields(
       { name: `${E.book} Surah`,        value: `${v.surahName} (${v.surahArabic})`, inline: true },
