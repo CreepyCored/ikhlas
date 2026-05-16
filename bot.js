@@ -43,13 +43,32 @@ const QURAN  = "https://api.alquran.cloud/v1";
 const UMMAH  = "https://ummahapi.com/api";
 
 // ─────────────────────────────────────────────────────
-//  COLLECTIONS
+//  COLLECTIONS — fawazahmed0 hadith-api (cdn.jsdelivr.net)
+//
+//  All 10 collections below are confirmed present in the
+//  fawazahmed0/hadith-api editions.json.  Only collections
+//  that have both an English (eng-*) AND Arabic (ara-*)
+//  edition are included.  Slugs verified against:
+//  https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions.json
+//
+//  Book key      | English slug       | Arabic slug
+//  --------------|--------------------|-----------------
+//  bukhari       | eng-bukhari        | ara-bukhari
+//  muslim        | eng-muslim         | ara-muslim
+//  abudawud      | eng-abudawud       | ara-abudawud
+//  tirmidhi      | eng-tirmidhi       | ara-tirmidhi
+//  ibnmajah      | eng-ibnmajah       | ara-ibnmajah
+//  nasai         | eng-nasai          | ara-nasai
+//  malik         | eng-malik          | ara-malik
+//  nawawi40      | eng-nawawi40       | ara-nawawi40
+//  qudsi40       | eng-qudsi40        | ara-qudsi40
+//  dehlawi40     | eng-dehlawi        | ara-dehlawi1
 // ─────────────────────────────────────────────────────
 const COLLECTIONS = {
   bukhari:  {
     name: "Sahih al-Bukhari", arabic: "صحيح البخاري",
     color: 0x1B5E20, emoji: "📗", total: 7563,
-    fawaz_eng: "eng-bukhari",  fawaz_ara: "ara-bukhari1",
+    fawaz_eng: "eng-bukhari",  fawaz_ara: "ara-bukhari",   // full diacritics version
   },
   muslim:   {
     name: "Sahih Muslim", arabic: "صحيح مسلم",
@@ -94,7 +113,7 @@ const COLLECTIONS = {
   dehlawi40: {
     name: "40 Hadith Dehlawi", arabic: "أربعون الشاه ولي الله",
     color: 0x4E342E, emoji: "📜", total: 40,
-    fawaz_eng: "eng-dehlawi",  fawaz_ara: "ara-dehlawi1",
+    fawaz_eng: "eng-dehlawi",  fawaz_ara: "ara-dehlawi1",  // only ara variant available
   },
 };
 const COL_KEYS = Object.keys(COLLECTIONS);
