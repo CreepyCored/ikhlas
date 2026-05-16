@@ -573,9 +573,8 @@ function hadithEmbed(h, showArabic = false) {
 function ayahEmbed(v, trKey = DEFAULT_TR) {
   const tr = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
 
-  // Translation line then Arabic in a code block (renders RTL in Discord)
   let desc = v.translation || "Translation unavailable.";
-  if (v.arabic) desc += `\n\n\`\`\`${v.arabic}\`\`\``;
+  if (v.arabic) desc += `\n\n> ${v.arabic}`;
 
   return new EmbedBuilder()
     .setColor(0x1B5E20)
@@ -688,9 +687,8 @@ function errEmbed(msg) {
 function autoAyahEmbed(v, trKey = DEFAULT_TR) {
   const tr = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
 
-  // Translation line then Arabic in a code block (renders RTL in Discord)
   let desc = v.translation || "Translation unavailable.";
-  if (v.arabic) desc += `\n\n\`\`\`${v.arabic}\`\`\``;
+  if (v.arabic) desc += `\n\n> ${v.arabic}`;
 
   return new EmbedBuilder()
     .setColor(0x1B5E20)
