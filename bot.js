@@ -9,17 +9,12 @@
  *
  *  ENV:  DISCORD_TOKEN  (required)
  *
- *  Confirmed fawaz response structure (from live API):
- *  {
- *    metadata: { name, section: { "N": "Chapter Name" } },
- *    hadiths: [{
- *      hadithnumber: 1035,
- *      arabicnumber: 1035,
- *      text: "English text…",
- *      grades: [{ name: "Al-Albani", grade: "Sahih" }, …],
- *      reference: { book: 2, hadith: 646 }
- *    }]
- *  }
+ *  Changes:
+ *  - Asma ul Husna: shows English translation/meaning prominently
+ *  - Hadith: flexible name resolution (al-bukhari 1, sahih al-bukhari 1,
+ *    bukhari 1, with/without diacritics, common aliases)
+ *  - Auto-verse: shows page number, cleaner embed (no <> brackets)
+ *  - Auto-verse embed improved styling overall
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -49,8 +44,6 @@ const UMMAH  = "https://ummahapi.com/api";
 
 // ─────────────────────────────────────────────────────
 //  COLLECTIONS
-//  fawaz_eng  — English edition slug
-//  fawaz_ara  — Arabic edition slug (may 404 for some; handled gracefully)
 // ─────────────────────────────────────────────────────
 const COLLECTIONS = {
   bukhari:  {
@@ -105,9 +98,129 @@ const COLLECTIONS = {
   },
 };
 const COL_KEYS = Object.keys(COLLECTIONS);
-
-// Bukhari & Muslim are universally Sahih — fawaz has no per-hadith grades for them
 const ALWAYS_SAHIH = new Set(["bukhari", "muslim"]);
+
+// ─────────────────────────────────────────────────────
+//  COLLECTION NAME RESOLVER
+//  Accepts things like: "bukhari", "al-bukhari", "sahih al-bukhari",
+//  "sahih bukhari", "abu dawud", "abudawud", "ibn majah", "tirmizi",
+//  "nasai", "nasaai", "malik", "nawawi", "40 nawawi", etc.
+//  Also strips diacritics/special chars for fuzzy matching.
+// ─────────────────────────────────────────────────────
+function stripDiacritics(s) {
+  // Remove Arabic diacritics + common Latin diacritic variants
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")   // Latin combining marks
+    .replace(/[\u064B-\u065F]/g, "")   // Arabic harakat
+    .replace(/[''`']/g, "")
+    .replace(/\u2019/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+const COLLECTION_ALIASES = {
+  // Bukhari
+  bukhari: "bukhari", buhari: "bukhari",
+  "al bukhari": "bukhari", "al-bukhari": "bukhari",
+  "sahih bukhari": "bukhari", "sahih al bukhari": "bukhari",
+  "sahih al-bukhari": "bukhari", "sahih albukhari": "bukhari",
+  "صحيح البخاري": "bukhari",
+
+  // Muslim
+  muslim: "muslim",
+  "sahih muslim": "muslim", "al muslim": "muslim",
+  "صحيح مسلم": "muslim",
+
+  // Abu Dawud
+  abudawud: "abudawud", "abu dawud": "abudawud", "abu dawood": "abudawud",
+  abudawood: "abudawud", dawud: "abudawud", dawood: "abudawud",
+  "sunan abu dawud": "abudawud", "sunan abudawud": "abudawud",
+  "سنن ابي داود": "abudawud",
+
+  // Tirmidhi
+  tirmidhi: "tirmidhi", tirmizi: "tirmidhi", tirmizee: "tirmidhi",
+  termizi: "tirmidhi", "al tirmidhi": "tirmidhi", "al-tirmidhi": "tirmidhi",
+  "jami tirmidhi": "tirmidhi", "jami al tirmidhi": "tirmidhi",
+  "jami at tirmidhi": "tirmidhi", "جامع الترمذي": "tirmidhi",
+
+  // Ibn Majah
+  ibnmajah: "ibnmajah", "ibn majah": "ibnmajah", "ibne majah": "ibnmajah",
+  majah: "ibnmajah", "sunan ibn majah": "ibnmajah",
+  "سنن ابن ماجه": "ibnmajah",
+
+  // Nasai
+  nasai: "nasai", nasaai: "nasai", "al nasai": "nasai", "an nasai": "nasai",
+  "an-nasai": "nasai", "al-nasai": "nasai", "nasa'i": "nasai",
+  "sunan nasai": "nasai", "sunan an nasai": "nasai",
+  "سنن النسائي": "nasai",
+
+  // Malik
+  malik: "malik", "muwatta": "malik", "muwatta malik": "malik",
+  "imam malik": "malik", "موطأ مالك": "malik",
+
+  // Nawawi 40
+  nawawi: "nawawi40", nawawi40: "nawawi40", "40 nawawi": "nawawi40",
+  "nawawi 40": "nawawi40", "forty nawawi": "nawawi40",
+  "40 hadith nawawi": "nawawi40", "الاربعون النووية": "nawawi40",
+
+  // Qudsi 40
+  qudsi: "qudsi40", qudsi40: "qudsi40", "40 qudsi": "qudsi40",
+  "qudsi 40": "qudsi40", "forty qudsi": "qudsi40",
+  "hadith qudsi": "qudsi40", "40 hadith qudsi": "qudsi40",
+
+  // Dehlawi 40
+  dehlawi: "dehlawi40", dehlawi40: "dehlawi40", "40 dehlawi": "dehlawi40",
+  "dehlawi 40": "dehlawi40",
+};
+
+/**
+ * Resolve a free-text collection name + hadith number from a message string.
+ * Returns { colKey, num } or null.
+ * Supports patterns like:
+ *   "bukhari 1", "al-Bukhari 1", "Sahih al-Bukhari 1",
+ *   "abu dawud 200", "ibn majah 5", "nawawi 10"
+ */
+function resolveCollectionAndNumber(input) {
+  if (!input) return null;
+  const stripped = stripDiacritics(input);
+
+  // Try longest alias match first (greedy: sort by descending length)
+  const aliases = Object.keys(COLLECTION_ALIASES).sort((a, b) => b.length - a.length);
+  for (const alias of aliases) {
+    const strippedAlias = stripDiacritics(alias);
+    if (stripped.startsWith(strippedAlias)) {
+      const rest = stripped.slice(strippedAlias.length).trim();
+      const num  = parseInt(rest);
+      if (!isNaN(num) && num >= 1) {
+        return { colKey: COLLECTION_ALIASES[alias], num };
+      }
+    }
+    // Also check "number alias" order e.g. "1 bukhari" (less common but be safe)
+    if (stripped.endsWith(strippedAlias)) {
+      const rest = stripped.slice(0, stripped.length - strippedAlias.length).trim();
+      const num  = parseInt(rest);
+      if (!isNaN(num) && num >= 1) {
+        return { colKey: COLLECTION_ALIASES[alias], num };
+      }
+    }
+  }
+  return null;
+}
+
+/** Resolve just a collection key from a string (no number needed). */
+function resolveCollectionKey(input) {
+  if (!input) return null;
+  const stripped = stripDiacritics(input);
+  // Direct COL_KEYS match
+  if (COL_KEYS.includes(stripped)) return stripped;
+  // Alias lookup
+  const aliases = Object.keys(COLLECTION_ALIASES).sort((a, b) => b.length - a.length);
+  for (const alias of aliases) {
+    if (stripDiacritics(alias) === stripped) return COLLECTION_ALIASES[alias];
+  }
+  return null;
+}
 
 // ─────────────────────────────────────────────────────
 //  QURAN TRANSLATIONS
@@ -124,10 +237,10 @@ const DEFAULT_TR = "sahih_international";
 //  TAFSIR EDITIONS
 // ─────────────────────────────────────────────────────
 const TAFSIRS = {
-  ibn_kathir:    { name: "Ibn Kathir (Abridged)", scholar: "Hafiz Ibn Kathir",                         lang: "English", flag: "🇬🇧" },
-  maarif:        { name: "Ma'arif al-Qur'an",     scholar: "Mufti Muhammad Shafi",                     lang: "English", flag: "🇬🇧" },
+  ibn_kathir:    { name: "Ibn Kathir (Abridged)", scholar: "Hafiz Ibn Kathir",                          lang: "English", flag: "🇬🇧" },
+  maarif:        { name: "Ma'arif al-Qur'an",     scholar: "Mufti Muhammad Shafi",                      lang: "English", flag: "🇬🇧" },
   muyassar:      { name: "Tafsir Muyassar",       scholar: "Ministry of Islamic Affairs, Saudi Arabia", lang: "Arabic",  flag: "🇸🇦" },
-  ibn_kathir_ar: { name: "Ibn Kathir (Arabic)",   scholar: "Hafiz Ibn Kathir",                         lang: "Arabic",  flag: "🇸🇦" },
+  ibn_kathir_ar: { name: "Ibn Kathir (Arabic)",   scholar: "Hafiz Ibn Kathir",                          lang: "Arabic",  flag: "🇸🇦" },
 };
 
 // ─────────────────────────────────────────────────────
@@ -263,19 +376,7 @@ function truncate(s, max = 3800) {
 
 // ═══════════════════════════════════════════════════════════════
 //  FAWAZAHMED0 HADITH API
-//
-//  Confirmed live response (eng-abudawud/1035):
-//  {
-//    metadata: { name, section: { "2": "Prayer (Kitab Al-Salat)" } },
-//    hadiths: [{
-//      hadithnumber: 1035, arabicnumber: 1035,
-//      text: "English text…",
-//      grades: [{ name: "Al-Albani", grade: "Sahih" }, …],
-//      reference: { book: 2, hadith: 646 }
-//    }]
-//  }
 // ═══════════════════════════════════════════════════════════════
-
 async function fawazFetch(edition, number) {
   const url = `${FAWAZ}/${edition}/${number}.json`;
   const res = await fetch(url);
@@ -284,36 +385,26 @@ async function fawazFetch(edition, number) {
 }
 
 function parseHadith(engData, araData, colKey) {
-  // Pull the first (and only) hadith from the array
   const h = engData.hadiths?.[0];
   const a = araData?.hadiths?.[0];
-
   if (!h) throw new Error(`fawaz returned no hadiths for ${colKey}`);
 
   const english = clean(h.text ?? "");
   const arabic  = clean(a?.text ?? "");
   const number  = String(h.hadithnumber ?? h.arabicnumber ?? "?");
 
-  // ── GRADES ──────────────────────────────────────────────────
-  // grades: [{ name: "Al-Albani", grade: "Sahih" }, …]
   const grades = Array.isArray(h.grades) ? h.grades : [];
-
   let finalGrade, allGrades;
 
   if (ALWAYS_SAHIH.has(colKey)) {
-    // Bukhari & Muslim: no per-hadith grades in fawaz, universally accepted
     finalGrade = "Sahih";
     allGrades  = "🟢 **Sahih** *(Agreed Upon — Muttafaqun Alayh)*";
   } else if (grades.length > 0) {
-    // Use Al-Albani as primary if present, else first scholar
     const primary  = grades.find(g => /albani/i.test(g.name ?? "")) ?? grades[0];
     finalGrade     = normalGrade(primary.grade);
-
-    // Build a per-scholar grade list with coloured emojis
     allGrades = grades.map(g => {
       const norm  = normalGrade(g.grade);
       const emoji = GRADE_META[norm]?.emoji ?? "⚪";
-      // Some grades have long reference strings (e.g. "Sahih Bukhari (1224)") — keep them
       return `${emoji} **${g.name}**: ${g.grade}`;
     }).join("\n");
   } else {
@@ -321,12 +412,8 @@ function parseHadith(engData, araData, colKey) {
     allGrades  = null;
   }
 
-  // ── SECTION / CHAPTER ──────────────────────────────────────
-  // section is an object like { "2": "Prayer (Kitab Al-Salat)" }
   const sectionObj = engData.metadata?.section ?? {};
   const section    = Object.values(sectionObj)[0] ?? null;
-
-  // ── BOOK REFERENCE ──────────────────────────────────────────
   const ref = h.reference
     ? `Book ${h.reference.book}, Hadith ${h.reference.hadith}`
     : null;
@@ -352,7 +439,7 @@ async function fetchRandomHadith(colKey) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  QURAN  (AlQuran Cloud — unchanged)
+//  QURAN  (AlQuran Cloud)
 // ═══════════════════════════════════════════════════════════════
 async function fetchAyah(surahN, ayahN, trKey = DEFAULT_TR) {
   const ed  = TRANSLATIONS[trKey]?.edition ?? TRANSLATIONS[DEFAULT_TR].edition;
@@ -415,7 +502,7 @@ async function fetchSurah(surahN, trKey = DEFAULT_TR) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  UMMAHAPI  (Tafsir · Dua · Asma · Hijri — unchanged)
+//  UMMAHAPI  (Tafsir · Dua · Asma · Hijri)
 // ═══════════════════════════════════════════════════════════════
 async function ummahFetch(path) {
   const res  = await fetch(`${UMMAH}${path}`);
@@ -444,7 +531,6 @@ function hadithEmbed(h, showArabic = false) {
     .setFooter({ text: "fawazahmed0 CDN • لا علم إلا ما علَّم الله" })
     .setTimestamp();
 
-  // Grade field — shows all scholars if available
   if (g) {
     embed.addFields({
       name:   "📊 Grade",
@@ -457,8 +543,8 @@ function hadithEmbed(h, showArabic = false) {
     { name: "📖 Collection", value: col.name,       inline: true },
     { name: "🔢 Number",     value: `#${h.number}`, inline: true }
   );
-  if (h.ref)     embed.addFields({ name: "🔗 Reference", value: h.ref,                         inline: true });
-  if (h.section) embed.addFields({ name: "📑 Chapter",   value: truncate(h.section, 256),      inline: false });
+  if (h.ref)     embed.addFields({ name: "🔗 Reference", value: h.ref,                    inline: true });
+  if (h.section) embed.addFields({ name: "📑 Chapter",   value: truncate(h.section, 256), inline: false });
   if (showArabic && h.arabic) {
     embed.addFields({ name: "🕌 Arabic", value: `\`\`\`${truncate(h.arabic, 1000)}\`\`\`` });
   }
@@ -476,8 +562,8 @@ function ayahEmbed(v, trKey = DEFAULT_TR) {
     { name: "📍 Reference",   value: `${v.surahNum}:${v.ayahNum}`, inline: true },
     { name: "🌐 Translation", value: `${tr.flag} ${tr.name}`,      inline: true }
   );
-  if (v.page) embed.addFields({ name: "📄 Page", value: `${v.page}/604`, inline: true });
-  if (v.juz)  embed.addFields({ name: "🗂️ Juz",  value: `${v.juz}/30`,  inline: true });
+  if (v.page) embed.addFields({ name: "📄 Page", value: `${v.page} / 604`, inline: true });
+  if (v.juz)  embed.addFields({ name: "🗂️ Juz",  value: `${v.juz} / 30`,  inline: true });
   embed.setFooter({ text: "القرآن الكريم — The Noble Quran" }).setTimestamp();
   return embed;
 }
@@ -496,8 +582,8 @@ function surahEmbed(s, trKey = DEFAULT_TR) {
     );
   if (s.first) {
     embed.addFields(
-      { name: "🕌 First Ayah (Arabic)", value: s.first.arabic,                     inline: false },
-      { name: "📖 Translation",         value: `*"${s.first.translation}"*`,        inline: false }
+      { name: "🕌 First Ayah (Arabic)", value: s.first.arabic,              inline: false },
+      { name: "📖 Translation",         value: `*"${s.first.translation}"*`, inline: false }
     );
   }
   embed.setFooter({ text: "القرآن الكريم — AlQuran Cloud" }).setTimestamp();
@@ -535,25 +621,40 @@ function duaEmbed(dua) {
     .setTimestamp();
 }
 
+// ── ASMA UL HUSNA EMBED (improved — shows translation prominently) ──────────
 function asmaEmbed(name) {
-  return new EmbedBuilder().setColor(0x1A237E)
-    .setAuthor({ name: `✨  Asma ul Husna — Name #${name.number} of 99` })
-    .setTitle(`${name.arabic}  •  ${name.transliteration}`)
-    .setDescription(`**"${name.meaning}"**\n\n${name.description || ""}`)
+  // Build a clean meaning/translation block
+  const meaningLine  = name.meaning        ? `> ${name.meaning}`        : null;
+  const descLine     = name.description    ? `\n${name.description}`    : "";
+  const transLine    = name.translation    ? `\n\n📘 **Translation:** ${name.translation}` : "";
+  const benefitLine  = name.benefit        ? `\n\n💎 **Benefit:** ${name.benefit}`          : "";
+
+  const desc = [meaningLine, descLine, transLine, benefitLine].filter(Boolean).join("") || "No description available.";
+
+  return new EmbedBuilder()
+    .setColor(0x1A237E)
+    .setAuthor({ name: `✨  Asma ul Husna — Name ${name.number} of 99` })
+    .setTitle(`${name.arabic}  —  ${name.transliteration}`)
+    .setDescription(desc.length > 4000 ? desc.substring(0, 4000) + "…" : desc)
     .addFields(
-      { name: "🔢 Number",          value: `${name.number}/99`,  inline: true },
-      { name: "🔤 Transliteration", value: name.transliteration, inline: true },
-      { name: "💬 Meaning",         value: name.meaning,         inline: true }
+      { name: "🔢 Number",          value: `${name.number} / 99`,   inline: true  },
+      { name: "🔤 Transliteration", value: name.transliteration,    inline: true  },
+      { name: "💬 Meaning",         value: name.meaning || "—",     inline: true  },
+      // Show English translation as its own field if the API provides it separately
+      ...(name.translation && name.translation !== name.meaning
+        ? [{ name: "📘 English Translation", value: name.translation, inline: false }]
+        : []),
     )
-    .setFooter({ text: "وَلِلَّهِ الْأَسْمَاءُ الْحُسْنَىٰ — (7:180)" }).setTimestamp();
+    .setFooter({ text: "وَلِلَّهِ الْأَسْمَاءُ الْحُسْنَىٰ — To Allah belong the Most Beautiful Names. (7:180)" })
+    .setTimestamp();
 }
 
 function hijriEmbed(data) {
   const { hijri: h, gregorian: g } = data;
   return new EmbedBuilder().setColor(0x3E2723).setTitle("🌙  Today's Islamic Date")
     .addFields(
-      { name: "🗓️ Hijri Date",     value: `**${h.day} ${h.month_name} ${h.year} AH**`,      inline: false },
-      { name: "📅 Gregorian Date", value: g.formatted || `${g.day}/${g.month}/${g.year}`,    inline: false }
+      { name: "🗓️ Hijri Date",     value: `**${h.day} ${h.month_name} ${h.year} AH**`,   inline: false },
+      { name: "📅 Gregorian Date", value: g.formatted || `${g.day}/${g.month}/${g.year}`, inline: false }
     )
     .setFooter({ text: "UmmahAPI • Hijri Calendar" }).setTimestamp();
 }
@@ -561,6 +662,30 @@ function hijriEmbed(data) {
 function errEmbed(msg) {
   return new EmbedBuilder().setColor(0xB71C1C).setTitle("⚠️  Could not load")
     .setDescription(msg).setFooter({ text: "Check the number/name and try again" });
+}
+
+// ── AUTO-VERSE EMBED (improved — no <>, shows page) ─────────────────────────
+function autoAyahEmbed(v, trKey = DEFAULT_TR) {
+  const tr = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
+
+  const embed = new EmbedBuilder()
+    .setColor(0x2E7D32)
+    .setAuthor({ name: `📖  ${v.surahName} (${v.surahArabic})  ·  Ayah ${v.ayahNum} of ${v.totalAyahs}` })
+    .setTitle(`${v.surahNum}:${v.ayahNum}  —  ${v.surahName}`)
+    .setDescription(`*"${v.translation || "Translation unavailable."}"*`);
+
+  if (v.arabic) {
+    embed.addFields({ name: "🕌 Arabic", value: v.arabic, inline: false });
+  }
+
+  embed.addFields(
+    { name: "🌐 Translation", value: `${tr.flag} ${tr.name}`,      inline: true },
+    { name: "🗂️ Juz",         value: `${v.juz} / 30`,              inline: true },
+    { name: "📄 Page",        value: `${v.page} / 604`,            inline: true },
+  );
+
+  embed.setFooter({ text: "React with ♻️ to dismiss  •  القرآن الكريم" });
+  return embed;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -577,7 +702,6 @@ function colMenu() {
   );
 }
 
-// customId: {code}|{colKey}|{num}  — pipe prevents colKey split issues
 function hadithBtns(colKey, num, showArabic = false) {
   const col  = COLLECTIONS[colKey];
   const n    = parseInt(num) || 1;
@@ -1065,8 +1189,20 @@ client.on("interactionCreate", async interaction => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  AUTO VERSE DETECTION  (BibleBot-style — type 2:255 or Baqarah 2:255)
+//  MESSAGE HANDLER — Hadith name detection + Auto-verse detection
+//
+//  Hadith patterns (case-insensitive, diacritics optional):
+//    bukhari 1
+//    al-Bukhari 1
+//    Sahih al-Bukhari 1
+//    Abu Dawud 200
+//    ibn majah 5
+//    nawawi 10
+//
+//  Quran patterns (unchanged):
+//    3:1  /  Al-Baqarah 2:255  /  [Kahf 18:1]
 // ═══════════════════════════════════════════════════════════════
+
 const SURAH_MAX_AYAH = [
   0,7,286,200,176,120,165,206,75,129,109,123,111,43,52,99,128,111,110,98,135,
   112,78,118,64,77,227,93,88,69,60,34,30,73,54,45,83,182,88,75,85,54,53,89,
@@ -1080,18 +1216,15 @@ function isValidAyah(s, a) {
 
 const VERSE_PATTERN = /\[?(?:([\w\u0600-\u06FF''\-\u2019 ]{2,40})\s+)?(\d{1,3}):(\d{1,3})(?:-\d{1,3})?\]?/g;
 
-function autoAyahEmbed(v, trKey = DEFAULT_TR) {
-  const tr = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
-  return new EmbedBuilder()
-    .setColor(0x1B5E20)
-    .setTitle(`${v.surahName} ${v.surahNum}:${v.ayahNum}  —  ${tr.flag} ${tr.name}`)
-    .setDescription(`**<${v.ayahNum}>** ${v.translation || "Translation unavailable."}\n\n> ${v.arabic}`)
-    .setFooter({ text: `${v.surahName} (${v.surahArabic}) • ${v.surahNum}:${v.ayahNum}/${v.totalAyahs}` });
-}
+// Hadith pattern: optional "hadith" keyword, then collection name + number
+// e.g. "bukhari 1", "hadith bukhari 1", "sahih al-bukhari 1"
+// We look for: (optional prefix) COLLECTION_NAME NUMBER
+const HADITH_PATTERN = /(?:^|\s)(?:hadith\s+)?([a-zA-Z\u0600-\u06FF'''\- ]{2,40}?)\s+(\d{1,5})(?:\s|$|[.,!?])/gi;
 
-const autoVerseCooldown = new Map();
-const AUTO_COOLDOWN_MS  = 5000;
-const MAX_AUTO_VERSES   = 3;
+const autoVerseCooldown  = new Map();
+const AUTO_COOLDOWN_MS   = 5000;
+const MAX_AUTO_VERSES    = 3;
+const MAX_AUTO_HADITHS   = 2;
 
 client.on("messageCreate", async message => {
   if (message.author.bot || message.webhookId) return;
@@ -1100,11 +1233,12 @@ client.on("messageCreate", async message => {
   const now = Date.now();
   if (now - (autoVerseCooldown.get(message.channelId) || 0) < AUTO_COOLDOWN_MS) return;
 
-  const matches = [];
+  // ── 1. Quran verse detection ─────────────────────────────────
+  const verseMatches = [];
   let match;
   VERSE_PATTERN.lastIndex = 0;
 
-  while ((match = VERSE_PATTERN.exec(message.content)) !== null && matches.length < MAX_AUTO_VERSES) {
+  while ((match = VERSE_PATTERN.exec(message.content)) !== null && verseMatches.length < MAX_AUTO_VERSES) {
     const rawName  = match[1]?.trim() || null;
     const numPart  = parseInt(match[2]);
     const ayahPart = parseInt(match[3]);
@@ -1113,15 +1247,46 @@ client.on("messageCreate", async message => {
       : (numPart >= 1 && numPart <= 114 ? numPart : null);
     if (!surahN || !isValidAyah(surahN, ayahPart)) continue;
     const key = `${surahN}:${ayahPart}`;
-    if (matches.some(m => m.key === key)) continue;
-    matches.push({ surahN, ayahN: ayahPart, key });
+    if (verseMatches.some(m => m.key === key)) continue;
+    verseMatches.push({ surahN, ayahN: ayahPart, key });
   }
 
-  if (!matches.length) return;
+  // ── 2. Hadith detection ──────────────────────────────────────
+  const hadithMatches = [];
+  HADITH_PATTERN.lastIndex = 0;
+
+  let hMatch;
+  while ((hMatch = HADITH_PATTERN.exec(message.content)) !== null && hadithMatches.length < MAX_AUTO_HADITHS) {
+    const candidateName = hMatch[1].trim();
+    const candidateNum  = parseInt(hMatch[2]);
+
+    // Try to resolve via full string first ("sahih al-bukhari"), then just the name
+    let resolved = resolveCollectionAndNumber(`${candidateName} ${candidateNum}`);
+    if (!resolved) {
+      const colKey = resolveCollectionKey(candidateName);
+      if (colKey) resolved = { colKey, num: candidateNum };
+    }
+    if (!resolved) continue;
+
+    const { colKey, num } = resolved;
+    if (num < 1 || num > COLLECTIONS[colKey].total) continue;
+
+    const key = `${colKey}:${num}`;
+    if (hadithMatches.some(m => m.key === key)) continue;
+    hadithMatches.push({ colKey, num, key });
+  }
+
+  if (!verseMatches.length && !hadithMatches.length) return;
   autoVerseCooldown.set(message.channelId, now);
 
-  const results = await Promise.allSettled(matches.map(m => fetchAyah(m.surahN, m.ayahN, DEFAULT_TR)));
-  const embeds  = results.filter(r => r.status === "fulfilled").map(r => autoAyahEmbed(r.value));
+  // Fetch all
+  const verseResults  = await Promise.allSettled(verseMatches.map(m => fetchAyah(m.surahN, m.ayahN, DEFAULT_TR)));
+  const hadithResults = await Promise.allSettled(hadithMatches.map(m => fetchHadith(m.colKey, m.num)));
+
+  const verseEmbeds  = verseResults.filter(r => r.status === "fulfilled").map(r => autoAyahEmbed(r.value));
+  const hadithEmbeds = hadithResults.filter(r => r.status === "fulfilled").map(r => hadithEmbed(r.value));
+
+  const embeds = [...verseEmbeds, ...hadithEmbeds];
   if (!embeds.length) return;
 
   try {
@@ -1132,7 +1297,7 @@ client.on("messageCreate", async message => {
       max: 1, time: 60_000, errors: [],
     }).then(collected => { if (collected.size) reply.delete().catch(() => {}); });
   } catch(e) {
-    console.error("autoVerse error:", e);
+    console.error("autoVerse/autoHadith error:", e);
   }
 });
 
