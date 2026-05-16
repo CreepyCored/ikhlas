@@ -557,7 +557,7 @@ function hadithEmbed(h, showArabic = false) {
 
   const embed = new EmbedBuilder()
     .setColor(g?.color ?? col.color)
-    .setAuthor({ name: `${col.emoji}  ${col.name}  •  Hadith #${h.number}` })
+    .setTitle(`${col.emoji}  ${col.name}  •  Hadith #${h.number}`)
     .setDescription(`*"${truncate(h.english || "Translation unavailable.", 3800)}"*`)
     .setFooter({ text: "fawazahmed0 CDN • لا علم إلا ما علَّم الله" })
     .setTimestamp();
