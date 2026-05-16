@@ -571,20 +571,25 @@ function hadithEmbed(h, showArabic = false) {
 }
 
 function ayahEmbed(v, trKey = DEFAULT_TR) {
-  const tr    = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
-  const embed = new EmbedBuilder()
+  const tr = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
+
+  // Translation line then Arabic in a code block (renders RTL in Discord)
+  let desc = v.translation || "Translation unavailable.";
+  if (v.arabic) desc += `\n\n\`\`\`${v.arabic}\`\`\``;
+
+  return new EmbedBuilder()
     .setColor(0x1B5E20)
-    .setAuthor({ name: `📖  ${v.surahName} (${v.surahArabic})  •  ${v.surahNum}:${v.ayahNum}` })
-    .setDescription(`*"${v.translation || "Translation unavailable."}"*`);
-  if (v.arabic) embed.addFields({ name: "🕌 Arabic", value: v.arabic });
-  embed.addFields(
-    { name: "📍 Reference",   value: `${v.surahNum}:${v.ayahNum}`, inline: true },
-    { name: "🌐 Translation", value: `${tr.flag} ${tr.name}`,      inline: true }
-  );
-  if (v.page) embed.addFields({ name: "📄 Page", value: `${v.page} / 604`, inline: true });
-  if (v.juz)  embed.addFields({ name: "🗂️ Juz",  value: `${v.juz} / 30`,  inline: true });
-  embed.setFooter({ text: "القرآن الكريم — The Noble Quran" }).setTimestamp();
-  return embed;
+    .setTitle(`${v.surahName} ${v.surahNum}:${v.ayahNum}  —  ${tr.flag} ${tr.name}`)
+    .setDescription(desc)
+    .addFields(
+      { name: "📖 Surah",       value: `${v.surahName} (${v.surahArabic})`, inline: true },
+      { name: "🔢 Ayah",        value: `${v.ayahNum} / ${v.totalAyahs}`,    inline: true },
+      { name: "📄 Page",        value: v.page ? `${v.page} / 604` : "—",    inline: true },
+      { name: "🗂️ Juz",         value: v.juz  ? `${v.juz} / 30`  : "—",    inline: true },
+      { name: "🌐 Translation", value: `${tr.flag} ${tr.name}`,             inline: true },
+    )
+    .setFooter({ text: "القرآن الكريم — The Noble Quran" })
+    .setTimestamp();
 }
 
 function surahEmbed(s, trKey = DEFAULT_TR) {
@@ -640,29 +645,25 @@ function duaEmbed(dua) {
     .setTimestamp();
 }
 
-// ── ASMA UL HUSNA EMBED (improved — shows translation prominently) ──────────
+// ── ASMA UL HUSNA EMBED ──────────────────────────────────────────────────────
+// UmmahAPI fields: number, arabic, transliteration, meaning, description
+// "meaning" IS the English translation of the name (e.g. "The Most Merciful")
+// "description" is the longer explanatory text
 function asmaEmbed(name) {
-  // Build a clean meaning/translation block
-  const meaningLine  = name.meaning        ? `> ${name.meaning}`        : null;
-  const descLine     = name.description    ? `\n${name.description}`    : "";
-  const transLine    = name.translation    ? `\n\n📘 **Translation:** ${name.translation}` : "";
-  const benefitLine  = name.benefit        ? `\n\n💎 **Benefit:** ${name.benefit}`          : "";
-
-  const desc = [meaningLine, descLine, transLine, benefitLine].filter(Boolean).join("") || "No description available.";
+  // Description block: longer explanation if available
+  const desc = name.description
+    ? (name.description.length > 4000 ? name.description.substring(0, 4000) + "…" : name.description)
+    : (name.meaning || "No description available.");
 
   return new EmbedBuilder()
     .setColor(0x1A237E)
     .setAuthor({ name: `✨  Asma ul Husna — Name ${name.number} of 99` })
     .setTitle(`${name.arabic}  —  ${name.transliteration}`)
-    .setDescription(desc.length > 4000 ? desc.substring(0, 4000) + "…" : desc)
+    .setDescription(desc)
     .addFields(
-      { name: "🔢 Number",          value: `${name.number} / 99`,   inline: true  },
-      { name: "🔤 Transliteration", value: name.transliteration,    inline: true  },
-      { name: "💬 Meaning",         value: name.meaning || "—",     inline: true  },
-      // Show English translation as its own field if the API provides it separately
-      ...(name.translation && name.translation !== name.meaning
-        ? [{ name: "📘 English Translation", value: name.translation, inline: false }]
-        : []),
+      { name: "🔢 Number",          value: `${name.number} / 99`,     inline: true },
+      { name: "🔤 Transliteration", value: name.transliteration || "—", inline: true },
+      { name: "📘 Translation",     value: name.meaning || "—",        inline: true },
     )
     .setFooter({ text: "وَلِلَّهِ الْأَسْمَاءُ الْحُسْنَىٰ — To Allah belong the Most Beautiful Names. (7:180)" })
     .setTimestamp();
@@ -683,28 +684,26 @@ function errEmbed(msg) {
     .setDescription(msg).setFooter({ text: "Check the number/name and try again" });
 }
 
-// ── AUTO-VERSE EMBED (improved — no <>, shows page) ─────────────────────────
+// ── AUTO-VERSE EMBED — same clean style as ayahEmbed ───────────────────────
 function autoAyahEmbed(v, trKey = DEFAULT_TR) {
   const tr = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
 
-  const embed = new EmbedBuilder()
-    .setColor(0x2E7D32)
-    .setAuthor({ name: `📖  ${v.surahName} (${v.surahArabic})  ·  Ayah ${v.ayahNum} of ${v.totalAyahs}` })
-    .setTitle(`${v.surahNum}:${v.ayahNum}  —  ${v.surahName}`)
-    .setDescription(`*"${v.translation || "Translation unavailable."}"*`);
+  // Translation line then Arabic in a code block (renders RTL in Discord)
+  let desc = v.translation || "Translation unavailable.";
+  if (v.arabic) desc += `\n\n\`\`\`${v.arabic}\`\`\``;
 
-  if (v.arabic) {
-    embed.addFields({ name: "🕌 Arabic", value: v.arabic, inline: false });
-  }
-
-  embed.addFields(
-    { name: "🌐 Translation", value: `${tr.flag} ${tr.name}`,      inline: true },
-    { name: "🗂️ Juz",         value: `${v.juz} / 30`,              inline: true },
-    { name: "📄 Page",        value: `${v.page} / 604`,            inline: true },
-  );
-
-  embed.setFooter({ text: "React with ♻️ to dismiss  •  القرآن الكريم" });
-  return embed;
+  return new EmbedBuilder()
+    .setColor(0x1B5E20)
+    .setTitle(`${v.surahName} ${v.surahNum}:${v.ayahNum}  —  ${tr.flag} ${tr.name}`)
+    .setDescription(desc)
+    .addFields(
+      { name: "📖 Surah",       value: `${v.surahName} (${v.surahArabic})`, inline: true },
+      { name: "🔢 Ayah",        value: `${v.ayahNum} / ${v.totalAyahs}`,    inline: true },
+      { name: "📄 Page",        value: v.page ? `${v.page} / 604` : "—",    inline: true },
+      { name: "🗂️ Juz",         value: v.juz  ? `${v.juz} / 30`  : "—",    inline: true },
+      { name: "🌐 Translation", value: `${tr.flag} ${tr.name}`,             inline: true },
+    )
+    .setFooter({ text: "React ♻️ to dismiss  •  القرآن الكريم" });
 }
 
 // ═══════════════════════════════════════════════════════════════
