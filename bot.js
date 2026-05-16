@@ -78,6 +78,8 @@ const E = {
   idea:         "<:idea:1505332431027310632>",
   letter:       "<:letter:1505332856925327459>",
   magnify:      "<:magnifyingglass:1505332144162209873>",
+  magnet:       "<:magnet:1505332668701872239>",
+  link:         "<:link:1490332324762484940>",
   message:      "<:message:1505332064814370847>",
   pencil:       "<:pencil:1505332155482640495>",
   pin:          "<:pin:1505332838030114927>",
@@ -572,7 +574,7 @@ function hadithEmbed(h, showArabic = false) {
     { name: `${E.book} Collection`, value: col.name,       inline: true },
     { name: `${E.pin} Number`,      value: `#${h.number}`, inline: true }
   );
-  if (h.ref)     embed.addFields({ name: `${E.magnet} Reference`, value: h.ref,                    inline: true });
+  if (h.ref)     embed.addFields({ name: `${E.link} Reference`, value: h.ref,                    inline: true });
   if (h.section) embed.addFields({ name: `${E.folder} Chapter`,   value: truncate(h.section, 256), inline: false });
   if (showArabic && h.arabic) {
     embed.addFields({ name: `${E.letter} Arabic`, value: `\`\`\`${truncate(h.arabic, 1000)}\`\`\`` });
