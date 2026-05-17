@@ -665,7 +665,7 @@ function asmaEmbed(name) {
   return new EmbedBuilder()
     .setColor(0x1A237E)
     .setAuthor({ name: `Asma ul Husna — Name ${name.number} of 99` })
-    .setTitle(`${name.arabic}  —  ${name.transliteration}`)
+    .setTitle(`${name.arabic}  —  ${name.transliteration}  (${name.meaning || "—"})`)
     .setDescription(desc)
     .addFields(
       { name: `${E.pin} Number`,           value: `${name.number} / 99`,       inline: true },
