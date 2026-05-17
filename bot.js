@@ -664,7 +664,7 @@ function asmaEmbed(name) {
 
   return new EmbedBuilder()
     .setColor(0x1A237E)
-    .setAuthor({ name: `${E.eye}  Asma ul Husna — Name ${name.number} of 99` })
+    .setAuthor({ name: `Asma ul Husna — Name ${name.number} of 99` })
     .setTitle(`${name.arabic}  —  ${name.transliteration}`)
     .setDescription(desc)
     .addFields(
@@ -708,7 +708,7 @@ function autoAyahEmbed(v, trKey = DEFAULT_TR) {
       { name: `${E.sandclock} Juz`,     value: v.juz  ? `${v.juz} / 30`  : "—",    inline: true },
       { name: `${E.earth} Translation`, value: `<:internet:1490332305196060723> ${tr.name}`,             inline: true },
     )
-    .setFooter({ text: `React <:recycle:1490332293544411336> to dismiss  •  القرآن الكريم` });
+    .setFooter({ text: 'React to dismiss  •  القرآن الكريم' });
 }
 
 // ═══════════════════════════════════════════════════════════════
