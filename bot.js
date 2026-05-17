@@ -646,7 +646,7 @@ function duaEmbed(dua) {
   const cat  = DUAS[dua.category] || { name: dua.category_info?.name || dua.category, emoji: E.paper };
   const reps = dua.repeat > 1 ? `\n\n*Repeat: **${dua.repeat}x***` : "";
   return new EmbedBuilder().setColor(0x006064)
-    .setAuthor({ name: `${cat.emoji}  ${cat.name}  •  Dua #${dua.id}` })
+    .setAuthor({ name: `${cat.name}  •  Dua #${dua.id}` })
     .setTitle(dua.title)
     .setDescription(`**${dua.arabic}**\n\n*${dua.transliteration}*\n\n"${dua.translation}"${reps}`)
     .addFields(
@@ -680,7 +680,7 @@ function hijriEmbed(data) {
   const { hijri: h, gregorian: g } = data;
   return new EmbedBuilder().setColor(0x3E2723).setTitle(`${E.sandclock}  Today's Islamic Date`)
     .addFields(
-      { name: `${E.star} Hijri Date`,      value: `**${h.day} ${h.month_name} ${h.year} AH**`,   inline: false },
+      { name: `<:paper:1490332319221809313> Hijri Date`,      value: `**${h.day} ${h.month_name} ${h.year} AH**`,   inline: false },
       { name: `${E.newspaper} Gregorian Date`, value: g.formatted || `${g.day}/${g.month}/${g.year}`, inline: false }
     )
     .setFooter({ text: "UmmahAPI • Hijri Calendar" }).setTimestamp();
