@@ -78,6 +78,7 @@ const E = {
   idea:         "<:idea:1505332431027310632>",
   letter:       "<:letter:1505332856925327459>",
   magnify:      "<:magnifyingglass:1505332144162209873>",
+  internet:     "<:internet:1490332305196060723>",
   magnet:       "<:magnet:1505332668701872239>",
   link:         "<:link:1490332324762484940>",
   message:      "<:message:1505332064814370847>",
@@ -597,7 +598,7 @@ function ayahEmbed(v, trKey = DEFAULT_TR) {
       { name: `${E.pin} Ayah`,          value: `${v.ayahNum} / ${v.totalAyahs}`,    inline: true },
       { name: `${E.newspaper} Page`,    value: v.page ? `${v.page} / 604` : "—",    inline: true },
       { name: `${E.sandclock} Juz`,     value: v.juz  ? `${v.juz} / 30`  : "—",    inline: true },
-      { name: `${E.earth} Translation`, value: `${tr.flag} ${tr.name}`,             inline: true },
+      { name: `${E.earth} Translation`, value: `<:internet:1490332305196060723> ${tr.name}`,             inline: true },
     )
     .setFooter({ text: "القرآن الكريم — The Noble Quran" })
     .setTimestamp();
@@ -613,7 +614,7 @@ function surahEmbed(s, trKey = DEFAULT_TR) {
       { name: `${E.message} Meaning`,    value: s.meaning || "—",           inline: true },
       { name: `${E.pin} Revelation`,     value: `${icon} ${s.revelation}`,  inline: true },
       { name: `${E.pin} Total Ayahs`,    value: `${s.totalAyahs}`,          inline: true },
-      { name: `${E.earth} Translation`,  value: `${tr.flag} ${tr.name}`,    inline: true },
+      { name: `${E.earth} Translation`,  value: `<:internet:1490332305196060723> ${tr.name}`,    inline: true },
     );
   if (s.first) {
     embed.addFields(
@@ -705,9 +706,9 @@ function autoAyahEmbed(v, trKey = DEFAULT_TR) {
       { name: `${E.pin} Ayah`,          value: `${v.ayahNum} / ${v.totalAyahs}`,    inline: true },
       { name: `${E.newspaper} Page`,    value: v.page ? `${v.page} / 604` : "—",    inline: true },
       { name: `${E.sandclock} Juz`,     value: v.juz  ? `${v.juz} / 30`  : "—",    inline: true },
-      { name: `${E.earth} Translation`, value: `${tr.flag} ${tr.name}`,             inline: true },
+      { name: `${E.earth} Translation`, value: `<:internet:1490332305196060723> ${tr.name}`,             inline: true },
     )
-    .setFooter({ text: `React ${E.recycle} to dismiss  •  القرآن الكريم` });
+    .setFooter({ text: `React <:recycle:1490332293544411336> to dismiss  •  القرآن الكريم` });
 }
 
 // ═══════════════════════════════════════════════════════════════
