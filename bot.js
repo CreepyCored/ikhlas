@@ -548,6 +548,13 @@ const getRandomDua = ()       => ummahFetch("/duas/random");
 const getDuasByCat = c        => ummahFetch(`/duas/category/${c}`);
 const getAllAsma    = ()       => ummahFetch("/asma-ul-husna");
 const getHijri     = ()       => ummahFetch("/today-hijri");
+const getDuaCategories = ()        => ummahFetch("/duas/categories");
+const getRandomAsma    = ()        => ummahFetch("/asma-ul-husna/random");
+const searchAsma       = q         => ummahFetch(`/asma-ul-husna/search?q=${encodeURIComponent(q)}`);
+const getIslamicMonths = ()        => ummahFetch("/islamic-months");
+const getIslamicEvents = ()        => ummahFetch("/islamic-events");
+const getPrayerTimes   = (lat,lng,madhab) => ummahFetch(`/prayer-times?lat=${lat}&lng=${lng}${madhab ? `&madhab=${madhab}` : ""}`);
+const getQibla         = (lat,lng) => ummahFetch(`/qibla?lat=${lat}&lng=${lng}`);
 
 // ═══════════════════════════════════════════════════════════════
 //  EMBED BUILDERS
@@ -689,6 +696,117 @@ function hijriEmbed(data) {
 function errEmbed(msg) {
   return new EmbedBuilder().setColor(0xB71C1C).setTitle(`${E.hazard}  Could not load`)
     .setDescription(msg).setFooter({ text: "Check the number/name and try again" });
+}
+
+// ─────────────────────────────────────────────────────
+//  NEW EMBED BUILDERS
+// ─────────────────────────────────────────────────────
+
+function prayerTimesEmbed(data, city) {
+  const t = data.times || data;
+  const date = data.date || "";
+  const method = data.method?.name || data.calculation_method || "";
+  const fields = [];
+  const prayerMap = {
+    fajr:    { label: "Fajr",    emoji: E.sun },
+    sunrise: { label: "Sunrise", emoji: E.sun },
+    dhuhr:   { label: "Dhuhr",   emoji: E.sun },
+    asr:     { label: "Asr",     emoji: E.sandclock },
+    maghrib: { label: "Maghrib", emoji: E.bell },
+    isha:    { label: "Isha",    emoji: E.cloud },
+  };
+  for (const [key, meta] of Object.entries(prayerMap)) {
+    const val = t[key] || t[key.charAt(0).toUpperCase() + key.slice(1)] || "—";
+    if (val !== "—") fields.push({ name: `${meta.emoji} ${meta.label}`, value: val, inline: true });
+  }
+  const embed = new EmbedBuilder()
+    .setColor(0x0D47A1)
+    .setTitle(`Prayer Times — ${city || "Your Location"}`)
+    .setFooter({ text: `UmmahAPI • ${method}` })
+    .setTimestamp();
+  if (date) embed.setDescription(`${E.sandclock} **${date}**`);
+  if (fields.length) embed.addFields(fields);
+  return embed;
+}
+
+function qiblaEmbed(data, city) {
+  const bearing = data.bearing ?? data.direction ?? data.qibla ?? "—";
+  const rounded = typeof bearing === "number" ? `${bearing.toFixed(1)}°` : `${bearing}°`;
+  const compass = bearing !== "—" ? getCompassDir(bearing) : "";
+  return new EmbedBuilder()
+    .setColor(0x1B5E20)
+    .setTitle(`Qibla Direction — ${city || "Your Location"}`)
+    .setDescription(`${E.earth} **${rounded}** ${compass}\n\nFace **${rounded}** from North (clockwise) toward the Kaaba.`)
+    .setFooter({ text: "UmmahAPI • Qibla Calculator" })
+    .setTimestamp();
+}
+
+function getCompassDir(deg) {
+  const dirs = ["N","NE","E","SE","S","SW","W","NW","N"];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+function islamicMonthsEmbed(months) {
+  const list = Array.isArray(months) ? months : (months.months || Object.values(months));
+  const lines = list.map(m => {
+    const num  = m.number ?? m.id ?? "";
+    const name = m.name || m.english || m.transliteration || "";
+    const ar   = m.arabic || "";
+    const days = m.days ? ` — ${m.days} days` : "";
+    return `**${num}.** ${name}${ar ? ` (${ar})` : ""}${days}`;
+  });
+  return new EmbedBuilder()
+    .setColor(0x3E2723)
+    .setTitle("Islamic Months")
+    .setDescription(lines.join("\n") || "No data available.")
+    .setFooter({ text: "UmmahAPI • Hijri Calendar" })
+    .setTimestamp();
+}
+
+function islamicEventsEmbed(events) {
+  const list = Array.isArray(events) ? events : (events.events || Object.values(events));
+  if (!list.length) return new EmbedBuilder().setColor(0x3E2723).setTitle("Islamic Events").setDescription("No events found.");
+  const lines = list.slice(0, 15).map(e => {
+    const name  = e.name || e.event || e.title || "—";
+    const date  = e.hijri_date || e.date || e.hijri || "";
+    const greg  = e.gregorian_date || e.gregorian || "";
+    return `${E.bell} **${name}**${date ? `\n${E.sandclock} ${date}` : ""}${greg ? ` • ${greg}` : ""}`;
+  });
+  return new EmbedBuilder()
+    .setColor(0x3E2723)
+    .setTitle("Islamic Events")
+    .setDescription(lines.join("\n\n") || "No events found.")
+    .setFooter({ text: "UmmahAPI • Islamic Calendar" })
+    .setTimestamp();
+}
+
+function asmaSearchEmbed(names, query) {
+  if (!names.length) return new EmbedBuilder().setColor(0x1A237E).setTitle("Asma ul Husna — Search").setDescription(`No results for **"${query}"**.`);
+  const lines = names.slice(0, 10).map(n =>
+    `**${n.number}.** ${n.arabic} — ${n.transliteration} *(${n.english || n.meaning || ""})*`
+  );
+  return new EmbedBuilder()
+    .setColor(0x1A237E)
+    .setTitle(`Asma ul Husna — Search: "${query}"`)
+    .setDescription(lines.join("\n"))
+    .setFooter({ text: `${names.length} result(s) • UmmahAPI` })
+    .setTimestamp();
+}
+
+function duaCategoriesEmbed(cats) {
+  const list = Array.isArray(cats) ? cats : (cats.categories || Object.values(cats));
+  const lines = list.map(c => {
+    const name  = c.name || c.category || c.slug || "—";
+    const slug  = c.slug || c.key || c.id || "";
+    const count = c.count || c.total || "";
+    return `${E.folder} **${name}**${count ? ` — ${count} duas` : ""}${slug ? `\n\`/dua category:${slug}\`` : ""}`;
+  });
+  return new EmbedBuilder()
+    .setColor(0x006064)
+    .setTitle("Dua Categories")
+    .setDescription(lines.join("\n\n") || "No categories found.")
+    .setFooter({ text: "UmmahAPI • Duas" })
+    .setTimestamp();
 }
 
 function autoAyahEmbed(v, trKey = DEFAULT_TR) {
@@ -849,6 +967,26 @@ const commands = [
   new SlashCommandBuilder().setName("daily").setDescription("Daily hadith, ayah, and dua"),
   new SlashCommandBuilder().setName("collections").setDescription("List all hadith collections"),
   new SlashCommandBuilder().setName("explore").setDescription("Explore hadith collections interactively"),
+
+  new SlashCommandBuilder().setName("prayertimes").setDescription("Get prayer times for a city")
+    .addStringOption(o => o.setName("city").setDescription("City name e.g. Dubai, London, New York").setRequired(true))
+    .addStringOption(o => o.setName("madhab").setDescription("Madhab for Asr calculation")
+      .addChoices(
+        { name: "Shafi (Standard)", value: "Shafi" },
+        { name: "Hanafi", value: "Hanafi" }
+      )),
+
+  new SlashCommandBuilder().setName("qibla").setDescription("Get Qibla direction for a city")
+    .addStringOption(o => o.setName("city").setDescription("City name e.g. Dubai, London, New York").setRequired(true)),
+
+  new SlashCommandBuilder().setName("islamicevents").setDescription("Get upcoming Islamic events and dates"),
+
+  new SlashCommandBuilder().setName("islamicmonths").setDescription("List all 12 Islamic (Hijri) months"),
+
+  new SlashCommandBuilder().setName("asmasearch").setDescription("Search the 99 Names of Allah by keyword")
+    .addStringOption(o => o.setName("query").setDescription("e.g. merciful, king, light").setRequired(true)),
+
+  new SlashCommandBuilder().setName("duacategories").setDescription("List all available dua categories"),
 ].map(c => c.toJSON());
 
 // ═══════════════════════════════════════════════════════════════
@@ -1039,6 +1177,82 @@ client.on("interactionCreate", async interaction => {
           )
           .setFooter({ text: "بسم الله الرحمن الرحيم" })
       ], components: [colMenu()] });
+    }
+
+    else if (cmd === "prayertimes") {
+      const city   = interaction.options.getString("city");
+      const madhab = interaction.options.getString("madhab") || "";
+      try {
+        // Geocode city using open-meteo geocoding (no key needed)
+        const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
+        const geoJson = await geoRes.json();
+        const place = geoJson.results?.[0];
+        if (!place) return interaction.editReply({ embeds: [errEmbed(`Could not find city **"${city}"**. Try a more specific name.`)] });
+        const { latitude: lat, longitude: lng, name, country } = place;
+        const data = await getPrayerTimes(lat, lng, madhab);
+        await interaction.editReply({ embeds: [prayerTimesEmbed(data, `${name}, ${country}`)] });
+      } catch(e) {
+        console.error(e);
+        await interaction.editReply({ embeds: [errEmbed(`Could not fetch prayer times for **${city}**.\n\`${e.message}\``)] });
+      }
+    }
+
+    else if (cmd === "qibla") {
+      const city = interaction.options.getString("city");
+      try {
+        const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
+        const geoJson = await geoRes.json();
+        const place = geoJson.results?.[0];
+        if (!place) return interaction.editReply({ embeds: [errEmbed(`Could not find city **"${city}"**.`)] });
+        const { latitude: lat, longitude: lng, name, country } = place;
+        const data = await getQibla(lat, lng);
+        await interaction.editReply({ embeds: [qiblaEmbed(data, `${name}, ${country}`)] });
+      } catch(e) {
+        console.error(e);
+        await interaction.editReply({ embeds: [errEmbed(`Could not fetch Qibla for **${city}**.\n\`${e.message}\``)] });
+      }
+    }
+
+    else if (cmd === "islamicevents") {
+      try {
+        const data = await getIslamicEvents();
+        await interaction.editReply({ embeds: [islamicEventsEmbed(data)] });
+      } catch(e) {
+        console.error(e);
+        await interaction.editReply({ embeds: [errEmbed("Could not fetch Islamic events.")] });
+      }
+    }
+
+    else if (cmd === "islamicmonths") {
+      try {
+        const data = await getIslamicMonths();
+        await interaction.editReply({ embeds: [islamicMonthsEmbed(data)] });
+      } catch(e) {
+        console.error(e);
+        await interaction.editReply({ embeds: [errEmbed("Could not fetch Islamic months.")] });
+      }
+    }
+
+    else if (cmd === "asmasearch") {
+      const query = interaction.options.getString("query");
+      try {
+        const data  = await searchAsma(query);
+        const names = Array.isArray(data) ? data : (data.names || data.results || []);
+        await interaction.editReply({ embeds: [asmaSearchEmbed(names, query)] });
+      } catch(e) {
+        console.error(e);
+        await interaction.editReply({ embeds: [errEmbed(`Could not search for **"${query}"**.`)] });
+      }
+    }
+
+    else if (cmd === "duacategories") {
+      try {
+        const data = await getDuaCategories();
+        await interaction.editReply({ embeds: [duaCategoriesEmbed(data)] });
+      } catch(e) {
+        console.error(e);
+        await interaction.editReply({ embeds: [errEmbed("Could not fetch dua categories.")] });
+      }
     }
   }
 
