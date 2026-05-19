@@ -553,6 +553,7 @@ const getRandomAsma    = ()        => ummahFetch("/asma-ul-husna/random");
 const searchAsma       = q         => ummahFetch(`/asma-ul-husna/search?q=${encodeURIComponent(q)}`);
 const getIslamicEvents = ()        => ummahFetch("/islamic-events");
 const getQibla         = (lat,lng) => ummahFetch(`/qibla?lat=${lat}&lng=${lng}`);
+const getWordByWord    = (s,a)      => ummahFetch(`/quran/words/${s}/${a}`);
 
 // ═══════════════════════════════════════════════════════════════
 //  EMBED BUILDERS
@@ -781,6 +782,90 @@ function duaCategoriesEmbed(cats) {
     .setTimestamp();
 }
 
+function wordByWordEmbed(data, surahN, ayahN) {
+  const words = Array.isArray(data) ? data : (data.words || data.data || []);
+  const surahName = SURAH_NAMES[surahN - 1] || `Surah ${surahN}`;
+
+  if (!words.length) {
+    return new EmbedBuilder().setColor(0x1B5E20)
+      .setTitle(`Word by Word — ${surahName} ${surahN}:${ayahN}`)
+      .setDescription("No word data available for this verse.")
+      .setFooter({ text: "UmmahAPI • Quranic Arabic" });
+  }
+
+  const lines = words.map((w, i) => {
+    const arabic   = w.arabic || w.text || w.word || "—";
+    const translit = w.transliteration || w.roman || "";
+    const meaning  = w.translation || w.meaning || w.english || "";
+    const pos      = w.part_of_speech || w.pos || "";
+    return `**${i + 1}.** ${arabic}${translit ? `  —  *${translit}*` : ""}${meaning ? `\n${E.brain} ${meaning}` : ""}${pos ? `  •  \`${pos}\`` : ""}`;
+  });
+
+  // Split into chunks if too long
+  const chunks = [];
+  let current  = "";
+  for (const line of lines) {
+    if ((current + "\n\n" + line).length > 3900) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = current ? current + "\n\n" + line : line;
+    }
+  }
+  if (current) chunks.push(current);
+
+  return new EmbedBuilder()
+    .setColor(0x1B5E20)
+    .setTitle(`Word by Word — ${surahName} ${surahN}:${ayahN}`)
+    .setDescription(chunks[0])
+    .addFields(
+      { name: `${E.book} Surah`,  value: `${surahName} (${surahN})`, inline: true },
+      { name: `${E.pin} Ayah`,    value: `${ayahN}`,                 inline: true },
+      { name: `${E.pin} Words`,   value: `${words.length}`,          inline: true },
+    )
+    .setFooter({ text: "UmmahAPI • Quranic Arabic Word Analysis" })
+    .setTimestamp();
+}
+
+function arabicWordEmbed(data, word) {
+  // freedictionaryapi.com returns an array of entries
+  const entry = Array.isArray(data) ? data[0] : data;
+  if (!entry) {
+    return new EmbedBuilder().setColor(0x1A237E)
+      .setTitle(`Arabic Dictionary — ${word}`)
+      .setDescription("No definition found. Make sure the word is spelled correctly in Arabic.")
+      .setFooter({ text: "Wiktionary via freedictionaryapi.com" });
+  }
+
+  const phonetic = entry.phonetic || entry.phonetics?.find(p => p.text)?.text || "";
+  const meanings = entry.meanings || [];
+
+  let desc = "";
+  for (const m of meanings.slice(0, 3)) {
+    const pos  = m.partOfSpeech || "";
+    const defs = (m.definitions || []).slice(0, 2);
+    desc += `**${pos}**\n`;
+    for (const d of defs) {
+      desc += `${E.paper} ${d.definition}\n`;
+      if (d.example) desc += `*"${d.example}"*\n`;
+      if (d.synonyms?.length) desc += `${E.brain} Synonyms: ${d.synonyms.slice(0,4).join(", ")}\n`;
+    }
+    desc += "\n";
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(0x1A237E)
+    .setTitle(`${word}${phonetic ? `  —  ${phonetic}` : ""}`)
+    .setDescription(desc.trim() || "No definitions available.")
+    .setFooter({ text: "Wiktionary via freedictionaryapi.com" })
+    .setTimestamp();
+
+  // Add origin if available
+  if (entry.origin) embed.addFields({ name: `${E.link} Origin`, value: entry.origin, inline: false });
+
+  return embed;
+}
+
 function autoAyahEmbed(v, trKey = DEFAULT_TR) {
   const tr = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
 
@@ -951,6 +1036,13 @@ const commands = [
     .addStringOption(o => o.setName("query").setDescription("e.g. merciful, king, light").setRequired(true)),
 
   new SlashCommandBuilder().setName("duacategories").setDescription("List all available dua categories"),
+
+  new SlashCommandBuilder().setName("wordbyword").setDescription("Get word-by-word breakdown of a Quran verse")
+    .addStringOption(o => o.setName("surah").setDescription("Surah number or name e.g. Fatihah, 1").setRequired(true))
+    .addIntegerOption(o => o.setName("ayah").setDescription("Ayah number").setRequired(true).setMinValue(1)),
+
+  new SlashCommandBuilder().setName("arabicword").setDescription("Look up an Arabic word definition")
+    .addStringOption(o => o.setName("word").setDescription("Arabic word e.g. رحمة").setRequired(true)),
 ].map(c => c.toJSON());
 
 // ═══════════════════════════════════════════════════════════════
@@ -1190,6 +1282,39 @@ client.on("interactionCreate", async interaction => {
       } catch(e) {
         console.error(e);
         await interaction.editReply({ embeds: [errEmbed("Could not fetch dua categories.")] });
+      }
+    }
+
+    else if (cmd === "wordbyword") {
+      const surahIn = interaction.options.getString("surah");
+      const ayahN   = interaction.options.getInteger("ayah");
+      const surahN  = resolveSurah(surahIn);
+      if (!surahN)
+        return interaction.editReply({ embeds: [errEmbed(`Cannot find surah **"${surahIn}"**.\nUse a number 1–114 or a name like \`Al-Kahf\`, \`Fatihah\`.`)] });
+      if (!isValidAyah(surahN, ayahN))
+        return interaction.editReply({ embeds: [errEmbed(`Ayah **${ayahN}** is out of range for that surah.`)] });
+      try {
+        const data = await getWordByWord(surahN, ayahN);
+        await interaction.editReply({ embeds: [wordByWordEmbed(data, surahN, ayahN)] });
+      } catch(e) {
+        console.error(e);
+        await interaction.editReply({ embeds: [errEmbed(`Could not load word breakdown for ${surahN}:${ayahN}.\n\`${e.message}\``)] });
+      }
+    }
+
+    else if (cmd === "arabicword") {
+      const word = interaction.options.getString("word");
+      try {
+        const res  = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/ar/${encodeURIComponent(word)}`);
+        if (res.status === 404) {
+          return interaction.editReply({ embeds: [errEmbed(`No definition found for **${word}**.\nMake sure it's spelled correctly in Arabic.`)] });
+        }
+        if (!res.ok) throw new Error(`Dictionary API HTTP ${res.status}`);
+        const data = await res.json();
+        await interaction.editReply({ embeds: [arabicWordEmbed(data, word)] });
+      } catch(e) {
+        console.error(e);
+        await interaction.editReply({ embeds: [errEmbed(`Could not look up **${word}**.\n\`${e.message}\``)] });
       }
     }
   }
