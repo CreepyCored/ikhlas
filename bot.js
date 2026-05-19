@@ -551,9 +551,7 @@ const getHijri     = ()       => ummahFetch("/today-hijri");
 const getDuaCategories = ()        => ummahFetch("/duas/categories");
 const getRandomAsma    = ()        => ummahFetch("/asma-ul-husna/random");
 const searchAsma       = q         => ummahFetch(`/asma-ul-husna/search?q=${encodeURIComponent(q)}`);
-const getIslamicMonths = ()        => ummahFetch("/islamic-months");
 const getIslamicEvents = ()        => ummahFetch("/islamic-events");
-const getPrayerTimes   = (lat,lng,madhab) => ummahFetch(`/prayer-times?lat=${lat}&lng=${lng}${madhab ? `&madhab=${madhab}` : ""}`);
 const getQibla         = (lat,lng) => ummahFetch(`/qibla?lat=${lat}&lng=${lng}`);
 
 // ═══════════════════════════════════════════════════════════════
@@ -702,32 +700,6 @@ function errEmbed(msg) {
 //  NEW EMBED BUILDERS
 // ─────────────────────────────────────────────────────
 
-function prayerTimesEmbed(data, city) {
-  const t = data.times || data;
-  const date = data.date || "";
-  const method = data.method?.name || data.calculation_method || "";
-  const fields = [];
-  const prayerMap = {
-    fajr:    { label: "Fajr",    emoji: E.sun },
-    sunrise: { label: "Sunrise", emoji: E.sun },
-    dhuhr:   { label: "Dhuhr",   emoji: E.sun },
-    asr:     { label: "Asr",     emoji: E.sandclock },
-    maghrib: { label: "Maghrib", emoji: E.bell },
-    isha:    { label: "Isha",    emoji: E.cloud },
-  };
-  for (const [key, meta] of Object.entries(prayerMap)) {
-    const val = t[key] || t[key.charAt(0).toUpperCase() + key.slice(1)] || "—";
-    if (val !== "—") fields.push({ name: `${meta.emoji} ${meta.label}`, value: val, inline: true });
-  }
-  const embed = new EmbedBuilder()
-    .setColor(0x0D47A1)
-    .setTitle(`Prayer Times — ${city || "Your Location"}`)
-    .setFooter({ text: `UmmahAPI • ${method}` })
-    .setTimestamp();
-  if (date) embed.setDescription(`${E.sandclock} **${date}**`);
-  if (fields.length) embed.addFields(fields);
-  return embed;
-}
 
 function qiblaEmbed(data, city) {
   const bearing = data.bearing ?? data.direction ?? data.qibla ?? "—";
@@ -968,20 +940,12 @@ const commands = [
   new SlashCommandBuilder().setName("collections").setDescription("List all hadith collections"),
   new SlashCommandBuilder().setName("explore").setDescription("Explore hadith collections interactively"),
 
-  new SlashCommandBuilder().setName("prayertimes").setDescription("Get prayer times for a city")
-    .addStringOption(o => o.setName("city").setDescription("City name e.g. Dubai, London, New York").setRequired(true))
-    .addStringOption(o => o.setName("madhab").setDescription("Madhab for Asr calculation")
-      .addChoices(
-        { name: "Shafi (Standard)", value: "Shafi" },
-        { name: "Hanafi", value: "Hanafi" }
-      )),
 
   new SlashCommandBuilder().setName("qibla").setDescription("Get Qibla direction for a city")
     .addStringOption(o => o.setName("city").setDescription("City name e.g. Dubai, London, New York").setRequired(true)),
 
   new SlashCommandBuilder().setName("islamicevents").setDescription("Get upcoming Islamic events and dates"),
 
-  new SlashCommandBuilder().setName("islamicmonths").setDescription("List all 12 Islamic (Hijri) months"),
 
   new SlashCommandBuilder().setName("asmasearch").setDescription("Search the 99 Names of Allah by keyword")
     .addStringOption(o => o.setName("query").setDescription("e.g. merciful, king, light").setRequired(true)),
@@ -994,10 +958,10 @@ const commands = [
 // ═══════════════════════════════════════════════════════════════
 client.once("ready", async () => {
   console.log(`✅ Bot ready: ${client.user.tag}`);
-  const [typeRaw, ...parts] = (process.env.BOT_STATUS || "WATCHING:📖 /ayah /hadith /dua").split(":");
+  const [typeRaw, ...parts] = (process.env.BOT_STATUS || "WATCHING:<:box:1505332088109400164> /quran /hadith /asmaallah").split(":");
   client.user.setPresence({
     activities: [{ name: parts.join(":"), type: { PLAYING:0,STREAMING:1,LISTENING:2,WATCHING:3,COMPETING:5 }[typeRaw.toUpperCase()] ?? 3 }],
-    status: process.env.BOT_ONLINE_STATUS || "online",
+    status: process.env.BOT_ONLINE_STATUS || "idle",
   });
   const rest = new REST({ version:"10" }).setToken(process.env.DISCORD_TOKEN);
   try {
@@ -1179,23 +1143,6 @@ client.on("interactionCreate", async interaction => {
       ], components: [colMenu()] });
     }
 
-    else if (cmd === "prayertimes") {
-      const city   = interaction.options.getString("city");
-      const madhab = interaction.options.getString("madhab") || "";
-      try {
-        // Geocode city using open-meteo geocoding (no key needed)
-        const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
-        const geoJson = await geoRes.json();
-        const place = geoJson.results?.[0];
-        if (!place) return interaction.editReply({ embeds: [errEmbed(`Could not find city **"${city}"**. Try a more specific name.`)] });
-        const { latitude: lat, longitude: lng, name, country } = place;
-        const data = await getPrayerTimes(lat, lng, madhab);
-        await interaction.editReply({ embeds: [prayerTimesEmbed(data, `${name}, ${country}`)] });
-      } catch(e) {
-        console.error(e);
-        await interaction.editReply({ embeds: [errEmbed(`Could not fetch prayer times for **${city}**.\n\`${e.message}\``)] });
-      }
-    }
 
     else if (cmd === "qibla") {
       const city = interaction.options.getString("city");
@@ -1223,15 +1170,6 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    else if (cmd === "islamicmonths") {
-      try {
-        const data = await getIslamicMonths();
-        await interaction.editReply({ embeds: [islamicMonthsEmbed(data)] });
-      } catch(e) {
-        console.error(e);
-        await interaction.editReply({ embeds: [errEmbed("Could not fetch Islamic months.")] });
-      }
-    }
 
     else if (cmd === "asmasearch") {
       const query = interaction.options.getString("query");
