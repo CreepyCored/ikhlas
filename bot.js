@@ -958,7 +958,7 @@ const commands = [
 // ═══════════════════════════════════════════════════════════════
 client.once("ready", async () => {
   console.log(`✅ Bot ready: ${client.user.tag}`);
-  const [typeRaw, ...parts] = (process.env.BOT_STATUS || "WATCHING:<:box:1505332088109400164> /quran /hadith /asmaallah").split(":");
+  const [typeRaw, ...parts] = (process.env.BOT_STATUS || "WATCHING:/quran /hadith /asmaallah").split(":");
   client.user.setPresence({
     activities: [{ name: parts.join(":"), type: { PLAYING:0,STREAMING:1,LISTENING:2,WATCHING:3,COMPETING:5 }[typeRaw.toUpperCase()] ?? 3 }],
     status: process.env.BOT_ONLINE_STATUS || "idle",
