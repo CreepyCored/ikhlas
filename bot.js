@@ -943,6 +943,91 @@ function asmaBtns(n) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  ARABIC LEXICON — arabiclexicon.hawramani.com (HTML scrape)
+//  No public API; scrape the WordPress /?s= search endpoint.
+// ═══════════════════════════════════════════════════════════════
+async function fetchHawramani(word) {
+  const url = `https://arabiclexicon.hawramani.com/?s=${encodeURIComponent(word)}`;
+  const res  = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; IslamBot/1.0)" },
+  });
+  if (!res.ok) throw new Error(`Hawramani HTTP ${res.status}`);
+  const html = await res.text();
+
+  const results = [];
+
+  // Parse article entries from WordPress search results
+  // Each result is wrapped in <article ...> ... </article>
+  const articleRe = /<article[^>]*>([\s\S]*?)<\/article>/gi;
+  let artMatch;
+  while ((artMatch = articleRe.exec(html)) !== null && results.length < 5) {
+    const block = artMatch[1];
+
+    // Title — inside <h2 ...><a ...>TITLE</a></h2>
+    const titleM = /<h[123][^>]*>[\s\S]*?<a[^>]*>([^<]+)<\/a>/i.exec(block);
+    const title  = titleM ? titleM[1].trim() : null;
+    if (!title) continue;
+
+    // Link
+    const linkM = /href="([^"]+)"/i.exec(block);
+    const link  = linkM ? linkM[1].trim() : null;
+
+    // Excerpt — inside <div class="entry-summary"> or <p>
+    const excM  = /<div[^>]*entry-summary[^>]*>([\s\S]*?)<\/div>/i.exec(block)
+               || /<p>([\s\S]*?)<\/p>/i.exec(block);
+    const excRaw = excM ? excM[1] : "";
+    const excerpt = excRaw
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
+      .replace(/&#8230;/g,"…").replace(/&nbsp;/g," ").replace(/&#[0-9]+;/g,"")
+      .trim()
+      .substring(0, 400);
+
+    results.push({ title, link, excerpt });
+  }
+
+  return results;
+}
+
+function hawramaniEmbed(word, results) {
+  if (!results.length) {
+    return new EmbedBuilder()
+      .setColor(0x1A237E)
+      .setTitle(`${E.brain}  Arabic Word — ${word}`)
+      .setDescription(
+        `No entries found for **${word}** in the Arabic Lexicon.\n\n` +
+        `Try searching directly: [arabiclexicon.hawramani.com](https://arabiclexicon.hawramani.com/?s=${encodeURIComponent(word)})\n\n` +
+        `${E.idea} *Tip: Use \`/asmasearch\` for the 99 Names of Allah, or \`/wordbyword\` for words inside a Quranic verse.*`
+      )
+      .setFooter({ text: "arabiclexicon.hawramani.com • 47 classical Arabic dictionaries" })
+      .setTimestamp();
+  }
+
+  const lines = results.map((r, i) => {
+    const excerpt = r.excerpt ? `\n${E.paper} *${r.excerpt}*` : "";
+    const link    = r.link ? ` [↗](${r.link})` : "";
+    return `**${i + 1}. ${r.title}**${link}${excerpt}`;
+  });
+
+  // Chunk if too long
+  let desc = lines.join("\n\n");
+  if (desc.length > 3900) desc = desc.substring(0, 3900) + "…";
+
+  return new EmbedBuilder()
+    .setColor(0x1A237E)
+    .setTitle(`${E.brain}  Arabic Lexicon — ${word}`)
+    .setDescription(desc)
+    .addFields({
+      name:   `${E.link} Search Online`,
+      value:  `[View all results on arabiclexicon.hawramani.com](https://arabiclexicon.hawramani.com/?s=${encodeURIComponent(word)})`,
+      inline: false,
+    })
+    .setFooter({ text: `${results.length} result(s) • 47 classical dictionaries incl. Lisan al-Arab, Lane's Lexicon, Qamus al-Muhit` })
+    .setTimestamp();
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  SLASH COMMANDS
 // ═══════════════════════════════════════════════════════════════
 const commands = [
@@ -1261,41 +1346,27 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    // ─── ARABIC WORD — fixed: uses UmmahAPI Asma search + Al-Maany fallback ───
+    // ─── ARABIC WORD — scrapes arabiclexicon.hawramani.com (47 classical dicts) ───
     else if (cmd === "arabicword") {
       const word = interaction.options.getString("word");
       try {
-        // Try Asma ul Husna search first (covers common Islamic terms)
-        const asmaData  = await searchAsma(word).catch(() => null);
-        const asmaNames = asmaData
-          ? (Array.isArray(asmaData) ? asmaData : (asmaData.names || asmaData.results || []))
-          : [];
-
-        if (asmaNames.length) {
-          await interaction.editReply({ embeds: [asmaSearchEmbed(asmaNames, word)] });
-          return;
-        }
-
-        // No match — show helpful reference links
-        const embed = new EmbedBuilder()
-          .setColor(0x1A237E)
-          .setTitle(`${E.brain}  Arabic Word — ${word}`)
-          .setDescription(
-            `No direct match found for **${word}** in the available databases.\n\n` +
-            `**Look it up here:**\n` +
-            `${E.link} [Al-Maany (Arabic ↔ English)](https://www.almaany.com/ar/dict/ar-en/${encodeURIComponent(word)}/)\n` +
-            `${E.link} [Quranic Arabic Corpus](https://corpus.quran.com/)\n` +
-            `${E.link} [Hans Wehr Dictionary](https://www.arabicstudent.info/hans-wehr/)\n` +
-            `${E.link} [Lane's Lexicon](https://www.tyndalearchive.com/TABS/Lane/)\n\n` +
-            `${E.idea} *Tip: Use \`/asmasearch\` for the 99 Names of Allah, or \`/wordbyword\` to analyse words inside a specific ayah.*`
-          )
-          .setFooter({ text: "Arabic Lexicon • البحث في المعجم العربي" })
-          .setTimestamp();
-
-        await interaction.editReply({ embeds: [embed] });
+        const results = await fetchHawramani(word);
+        await interaction.editReply({ embeds: [hawramaniEmbed(word, results)] });
       } catch(e) {
         console.error(e);
-        await interaction.editReply({ embeds: [errEmbed(`Could not look up **${word}**.\n\`${e.message}\``)] });
+        // Fallback: show direct link if scrape fails
+        await interaction.editReply({ embeds: [
+          new EmbedBuilder()
+            .setColor(0x1A237E)
+            .setTitle(`${E.brain}  Arabic Word — ${word}`)
+            .setDescription(
+              `Could not fetch results automatically. Search directly:\n\n` +
+              `${E.link} [arabiclexicon.hawramani.com — **${word}**](https://arabiclexicon.hawramani.com/?s=${encodeURIComponent(word)})\n\n` +
+              `Covers 47 dictionaries including Lisān al-ʿArab, Lane's Lexicon, al-Mufradāt and more.`
+            )
+            .setFooter({ text: `Error: ${e.message}` })
+            .setTimestamp()
+        ]});
       }
     }
   }
