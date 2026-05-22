@@ -5,11 +5,16 @@
  *
  *  Hadith  — fawazahmed0 CDN  (cdn.jsdelivr.net)  NO KEY
  *  Quran   — AlQuran Cloud    (api.alquran.cloud)  NO KEY
- *  Tafsir / Duas / Asma / Hijri — UmmahAPI         NO KEY
+ *  Tafsir  — spa5k CDN        (cdn.jsdelivr.net)   NO KEY  ← 27 tafsirs
+ *  Duas / Asma / Hijri — UmmahAPI                  NO KEY
  *
  *  ENV:  DISCORD_TOKEN  (required)
  *
  *  Changes:
+ *  - Tafsir: switched from UmmahAPI to spa5k/tafsir_api CDN (27 tafsirs,
+ *    no rate limits, same jsDelivr CDN as fawazahmed0)
+ *  - New tafsirs: Ibn Kathir EN, al-Jalalayn EN, al-Sa'di EN,
+ *    Muyassar AR, al-Tabari AR, Ibn Kathir AR
  *  - Asma ul Husna: shows English translation/meaning prominently
  *  - Hadith: flexible name resolution (al-bukhari 1, sahih al-bukhari 1,
  *    bukhari 1, with/without diacritics, common aliases)
@@ -101,6 +106,7 @@ const E = {
 const FAWAZ  = "https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions";
 const QURAN  = "https://api.alquran.cloud/v1";
 const UMMAH  = "https://ummahapi.com/api";
+const SPA5K  = "https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir";
 
 // ─────────────────────────────────────────────────────
 //  COLLECTIONS
@@ -262,13 +268,16 @@ const TRANS_KEYS = Object.keys(TRANSLATIONS);
 const DEFAULT_TR = "sahih_international";
 
 // ─────────────────────────────────────────────────────
-//  TAFSIR EDITIONS
+//  TAFSIR EDITIONS  —  spa5k/tafsir_api via jsDelivr CDN
+//  Full slug list: https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir/editions.json
 // ─────────────────────────────────────────────────────
 const TAFSIRS = {
-  ibn_kathir:    { name: "Ibn Kathir (Abridged)", scholar: "Hafiz Ibn Kathir",                          lang: "English", flag: "🇬🇧" },
-  maarif:        { name: "Ma'arif al-Qur'an",     scholar: "Mufti Muhammad Shafi",                      lang: "English", flag: "🇬🇧" },
-  muyassar:      { name: "Tafsir Muyassar",       scholar: "Ministry of Islamic Affairs, Saudi Arabia", lang: "Arabic",  flag: "🇸🇦" },
-  ibn_kathir_ar: { name: "Ibn Kathir (Arabic)",   scholar: "Hafiz Ibn Kathir",                          lang: "Arabic",  flag: "🇸🇦" },
+  ibn_kathir:    { name: "Ibn Kathir",          scholar: "Hafiz Ibn Kathir",                          lang: "English", flag: "🇬🇧", slug: "en-tafisr-ibn-kathir"  },
+  jalalayn:      { name: "Tafsir al-Jalalayn",  scholar: "al-Suyuti & al-Mahalli",                    lang: "English", flag: "🇬🇧", slug: "en-al-jalalayn"         },
+  saadi:         { name: "Tafsir al-Sa'di",     scholar: "Abd al-Rahman al-Sa'di",                    lang: "English", flag: "🇬🇧", slug: "en-tafsir-al-saadi"     },
+  muyassar:      { name: "Tafsir Muyassar",     scholar: "Ministry of Islamic Affairs, Saudi Arabia", lang: "Arabic",  flag: "🇸🇦", slug: "ar-tafsir-muyassar"     },
+  tabari:        { name: "Tafsir al-Tabari",    scholar: "Imam Ibn Jarir al-Tabari",                  lang: "Arabic",  flag: "🇸🇦", slug: "ar-tafsir-al-tabari"    },
+  ibn_kathir_ar: { name: "Ibn Kathir (Arabic)", scholar: "Hafiz Ibn Kathir",                          lang: "Arabic",  flag: "🇸🇦", slug: "ar-tafsir-ibn-kathir"   },
 };
 
 // ─────────────────────────────────────────────────────
@@ -409,7 +418,6 @@ function safeStr(val) {
   if (typeof val === "string") return val;
   if (val === null || val === undefined) return "";
   if (typeof val === "number") return String(val);
-  // If it's an object with a common text field, extract it
   if (typeof val === "object") {
     return val.text || val.value || val.name || val.arabic || val.english || "";
   }
@@ -549,7 +557,29 @@ async function fetchSurah(surahN, trKey = DEFAULT_TR) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  UMMAHAPI  (Tafsir · Dua · Asma · Hijri)
+//  SPA5K TAFSIR API  (cdn.jsdelivr.net — no key, no rate limits)
+//  URL: {SPA5K}/{slug}/{surah}/{ayah}.json
+//  Editions list: {SPA5K}/editions.json
+// ═══════════════════════════════════════════════════════════════
+async function getTafsir(tafsirKey, surahN, ayahN) {
+  const t = TAFSIRS[tafsirKey];
+  if (!t) throw new Error(`Unknown tafsir key: ${tafsirKey}`);
+  const url = `${SPA5K}/${t.slug}/${surahN}/${ayahN}.json`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`spa5k tafsir HTTP ${res.status} — ${url}`);
+  const json = await res.json();
+  // Normalize to the shape tafsirEmbed() expects
+  const text = json.text ?? json.tafsir ?? json.content ?? json.explanation
+    ?? (typeof json === "string" ? json : null)
+    ?? "Tafsir unavailable.";
+  return {
+    verse_key: `${surahN}:${ayahN}`,
+    tafsir: { text: clean(String(text)) },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  UMMAHAPI  (Duas · Asma · Hijri · Qibla · Events · WordByWord)
 // ═══════════════════════════════════════════════════════════════
 async function ummahFetch(path) {
   const res  = await fetch(`${UMMAH}${path}`);
@@ -558,7 +588,6 @@ async function ummahFetch(path) {
   if (!json.success) throw new Error("UmmahAPI error");
   return json.data;
 }
-const getTafsir        = (k,s,a)     => ummahFetch(`/tafsir/${k}/surah/${s}/ayah/${a}`);
 const getRandomDua     = ()          => ummahFetch("/duas/random");
 const getDuasByCat     = c           => ummahFetch(`/duas/category/${c}`);
 const getAllAsma        = ()          => ummahFetch("/asma-ul-husna");
@@ -660,7 +689,7 @@ function tafsirEmbed(data, key) {
       { name: `${E.speaker} Language`,   value: t.lang,         inline: true },
       { name: `${E.pin} Ayah`,           value: data.verse_key, inline: true }
     )
-    .setFooter({ text: "UmmahAPI • تفسير القرآن الكريم" }).setTimestamp();
+    .setFooter({ text: "spa5k/tafsir_api • تفسير القرآن الكريم" }).setTimestamp();
 }
 
 function duaEmbed(dua) {
@@ -790,7 +819,6 @@ function wordByWordEmbed(data, surahN, ayahN) {
   }
 
   const lines = words.map((w, i) => {
-    // Safely extract strings; if the field is an object, drill into it
     const arabic   = stripParens(safeStr(w.arabic)   || safeStr(w.text)   || safeStr(w.word))   || "—";
     const translit = stripParens(safeStr(w.transliteration) || safeStr(w.roman));
     const meaning  = stripParens(safeStr(w.translation)     || safeStr(w.meaning) || safeStr(w.english));
@@ -803,7 +831,6 @@ function wordByWordEmbed(data, surahN, ayahN) {
     return line;
   });
 
-  // Split into chunks if too long
   const chunks = [];
   let current  = "";
   for (const line of lines) {
@@ -956,23 +983,18 @@ async function fetchHawramani(word) {
 
   const results = [];
 
-  // Parse article entries from WordPress search results
-  // Each result is wrapped in <article ...> ... </article>
   const articleRe = /<article[^>]*>([\s\S]*?)<\/article>/gi;
   let artMatch;
   while ((artMatch = articleRe.exec(html)) !== null && results.length < 5) {
     const block = artMatch[1];
 
-    // Title — inside <h2 ...><a ...>TITLE</a></h2>
     const titleM = /<h[123][^>]*>[\s\S]*?<a[^>]*>([^<]+)<\/a>/i.exec(block);
     const title  = titleM ? titleM[1].trim() : null;
     if (!title) continue;
 
-    // Link
     const linkM = /href="([^"]+)"/i.exec(block);
     const link  = linkM ? linkM[1].trim() : null;
 
-    // Excerpt — inside <div class="entry-summary"> or <p>
     const excM  = /<div[^>]*entry-summary[^>]*>([\s\S]*?)<\/div>/i.exec(block)
                || /<p>([\s\S]*?)<\/p>/i.exec(block);
     const excRaw = excM ? excM[1] : "";
@@ -1010,7 +1032,6 @@ function hawramaniEmbed(word, results) {
     return `**${i + 1}. ${r.title}**${link}${excerpt}`;
   });
 
-  // Chunk if too long
   let desc = lines.join("\n\n");
   if (desc.length > 3900) desc = desc.substring(0, 3900) + "…";
 
@@ -1354,7 +1375,6 @@ client.on("interactionCreate", async interaction => {
         await interaction.editReply({ embeds: [hawramaniEmbed(word, results)] });
       } catch(e) {
         console.error(e);
-        // Fallback: show direct link if scrape fails
         await interaction.editReply({ embeds: [
           new EmbedBuilder()
             .setColor(0x1A237E)
@@ -1497,7 +1517,7 @@ client.on("interactionCreate", async interaction => {
         embeds: [new EmbedBuilder().setColor(0x4A148C).setTitle(`${E.book}  Choose a Tafsir`)
           .setDescription(`Select commentary for **${s}:${a}**\n\n` +
             Object.entries(TAFSIRS).map(([,v]) => `${v.flag} **${v.name}** — *${v.scholar}* (${v.lang})`).join("\n"))
-          .setFooter({ text: "تفسير القرآن الكريم — UmmahAPI" })],
+          .setFooter({ text: "تفسير القرآن الكريم — spa5k/tafsir_api" })],
         components: [tafsirMenu(parseInt(s), parseInt(a))],
       });
     }
