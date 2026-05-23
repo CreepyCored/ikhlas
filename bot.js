@@ -5,16 +5,11 @@
  *
  *  Hadith  — fawazahmed0 CDN  (cdn.jsdelivr.net)  NO KEY
  *  Quran   — AlQuran Cloud    (api.alquran.cloud)  NO KEY
- *  Tafsir  — spa5k CDN        (cdn.jsdelivr.net)   NO KEY  ← 27 tafsirs
- *  Duas / Asma / Hijri — UmmahAPI                  NO KEY
+ *  Tafsir / Duas / Asma / Hijri — UmmahAPI         NO KEY
  *
  *  ENV:  DISCORD_TOKEN  (required)
  *
  *  Changes:
- *  - Tafsir: switched from UmmahAPI to spa5k/tafsir_api CDN (27 tafsirs,
- *    no rate limits, same jsDelivr CDN as fawazahmed0)
- *  - New tafsirs: Ibn Kathir EN, al-Jalalayn EN, al-Sa'di EN,
- *    Muyassar AR, al-Tabari AR, Ibn Kathir AR
  *  - Asma ul Husna: shows English translation/meaning prominently
  *  - Hadith: flexible name resolution (al-bukhari 1, sahih al-bukhari 1,
  *    bukhari 1, with/without diacritics, common aliases)
@@ -43,8 +38,11 @@ const client = new Client({
 
 // ─────────────────────────────────────────────────────
 //  CUSTOM EMOJI REFERENCES
+//  Server 1 (Ikhlas): pixel theme emojis
+//  Server 2: additional pixel theme emojis
 // ─────────────────────────────────────────────────────
 const E = {
+  // Server 1
   incorrect_x:  "<:incorrect:1490332609102745600>",
   incorrect_o:  "<:incorrect:1490332611304755250>",
   key:          "<:key:1490332311965667469>",
@@ -70,6 +68,7 @@ const E = {
   logs:         "<:logs:1490332341711929545>",
   stick:        "<:stick:1490382783397498890>",
   rose:         "<:rose:1490332346459881522>",
+  // Server 2
   dice:         "<:dice:1505333329111683152>",
   book:         "<:book:1505332214051766384>",
   box:          "<:box:1505332088109400164>",
@@ -106,7 +105,6 @@ const E = {
 const FAWAZ  = "https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions";
 const QURAN  = "https://api.alquran.cloud/v1";
 const UMMAH  = "https://ummahapi.com/api";
-const SPA5K  = "https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir";
 
 // ─────────────────────────────────────────────────────
 //  COLLECTIONS
@@ -268,16 +266,13 @@ const TRANS_KEYS = Object.keys(TRANSLATIONS);
 const DEFAULT_TR = "sahih_international";
 
 // ─────────────────────────────────────────────────────
-//  TAFSIR EDITIONS  —  spa5k/tafsir_api via jsDelivr CDN
-//  Full slug list: https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir/editions.json
+//  TAFSIR EDITIONS
 // ─────────────────────────────────────────────────────
 const TAFSIRS = {
-  ibn_kathir:    { name: "Ibn Kathir",          scholar: "Hafiz Ibn Kathir",                          lang: "English", flag: "🇬🇧", slug: "en-tafisr-ibn-kathir"  },
-  jalalayn:      { name: "Tafsir al-Jalalayn",  scholar: "al-Suyuti & al-Mahalli",                    lang: "English", flag: "🇬🇧", slug: "en-al-jalalayn"         },
-  saadi:         { name: "Tafsir al-Sa'di",     scholar: "Abd al-Rahman al-Sa'di",                    lang: "English", flag: "🇬🇧", slug: "en-tafsir-al-saadi"     },
-  muyassar:      { name: "Tafsir Muyassar",     scholar: "Ministry of Islamic Affairs, Saudi Arabia", lang: "Arabic",  flag: "🇸🇦", slug: "ar-tafsir-muyassar"     },
-  tabari:        { name: "Tafsir al-Tabari",    scholar: "Imam Ibn Jarir al-Tabari",                  lang: "Arabic",  flag: "🇸🇦", slug: "ar-tafsir-al-tabari"    },
-  ibn_kathir_ar: { name: "Ibn Kathir (Arabic)", scholar: "Hafiz Ibn Kathir",                          lang: "Arabic",  flag: "🇸🇦", slug: "ar-tafsir-ibn-kathir"   },
+  ibn_kathir:    { name: "Ibn Kathir (Abridged)", scholar: "Hafiz Ibn Kathir",                          lang: "English", flag: "🇬🇧" },
+  maarif:        { name: "Ma'arif al-Qur'an",     scholar: "Mufti Muhammad Shafi",                      lang: "English", flag: "🇬🇧" },
+  muyassar:      { name: "Tafsir Muyassar",       scholar: "Ministry of Islamic Affairs, Saudi Arabia", lang: "Arabic",  flag: "🇸🇦" },
+  ibn_kathir_ar: { name: "Ibn Kathir (Arabic)",   scholar: "Hafiz Ibn Kathir",                          lang: "Arabic",  flag: "🇸🇦" },
 };
 
 // ─────────────────────────────────────────────────────
@@ -411,24 +406,6 @@ function truncate(s, max = 3800) {
   return s.length > max ? s.substring(0, max) + "\n*(truncated…)*" : s;
 }
 
-// ─────────────────────────────────────────────────────
-//  SAFE STRING EXTRACTOR — prevents [object Object]
-// ─────────────────────────────────────────────────────
-function safeStr(val) {
-  if (typeof val === "string") return val;
-  if (val === null || val === undefined) return "";
-  if (typeof val === "number") return String(val);
-  if (typeof val === "object") {
-    return val.text || val.value || val.name || val.arabic || val.english || "";
-  }
-  return "";
-}
-
-// Strip parenthetical notes like (verb), (noun), (3rd person) etc.
-function stripParens(s) {
-  return safeStr(s).replace(/\s*\([^)]*\)/g, "").trim();
-}
-
 // ═══════════════════════════════════════════════════════════════
 //  FAWAZAHMED0 HADITH API
 // ═══════════════════════════════════════════════════════════════
@@ -557,29 +534,7 @@ async function fetchSurah(surahN, trKey = DEFAULT_TR) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SPA5K TAFSIR API  (cdn.jsdelivr.net — no key, no rate limits)
-//  URL: {SPA5K}/{slug}/{surah}/{ayah}.json
-//  Editions list: {SPA5K}/editions.json
-// ═══════════════════════════════════════════════════════════════
-async function getTafsir(tafsirKey, surahN, ayahN) {
-  const t = TAFSIRS[tafsirKey];
-  if (!t) throw new Error(`Unknown tafsir key: ${tafsirKey}`);
-  const url = `${SPA5K}/${t.slug}/${surahN}/${ayahN}.json`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`spa5k tafsir HTTP ${res.status} — ${url}`);
-  const json = await res.json();
-  // Normalize to the shape tafsirEmbed() expects
-  const text = json.text ?? json.tafsir ?? json.content ?? json.explanation
-    ?? (typeof json === "string" ? json : null)
-    ?? "Tafsir unavailable.";
-  return {
-    verse_key: `${surahN}:${ayahN}`,
-    tafsir: { text: clean(String(text)) },
-  };
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  UMMAHAPI  (Duas · Asma · Hijri · Qibla · Events · WordByWord)
+//  UMMAHAPI  (Tafsir · Dua · Asma · Hijri)
 // ═══════════════════════════════════════════════════════════════
 async function ummahFetch(path) {
   const res  = await fetch(`${UMMAH}${path}`);
@@ -588,16 +543,17 @@ async function ummahFetch(path) {
   if (!json.success) throw new Error("UmmahAPI error");
   return json.data;
 }
-const getRandomDua     = ()          => ummahFetch("/duas/random");
-const getDuasByCat     = c           => ummahFetch(`/duas/category/${c}`);
-const getAllAsma        = ()          => ummahFetch("/asma-ul-husna");
-const getHijri         = ()          => ummahFetch("/today-hijri");
-const getDuaCategories = ()          => ummahFetch("/duas/categories");
-const getRandomAsma    = ()          => ummahFetch("/asma-ul-husna/random");
-const searchAsma       = q           => ummahFetch(`/asma-ul-husna/search?q=${encodeURIComponent(q)}`);
-const getIslamicEvents = ()          => ummahFetch("/islamic-events");
-const getQibla         = (lat,lng)   => ummahFetch(`/qibla?lat=${lat}&lng=${lng}`);
-const getWordByWord    = (s,a)       => ummahFetch(`/quran/words/${s}/${a}`);
+const getTafsir    = (k,s,a) => ummahFetch(`/tafsir/${k}/surah/${s}/ayah/${a}`);
+const getRandomDua = ()       => ummahFetch("/duas/random");
+const getDuasByCat = c        => ummahFetch(`/duas/category/${c}`);
+const getAllAsma    = ()       => ummahFetch("/asma-ul-husna");
+const getHijri     = ()       => ummahFetch("/today-hijri");
+const getDuaCategories = ()        => ummahFetch("/duas/categories");
+const getRandomAsma    = ()        => ummahFetch("/asma-ul-husna/random");
+const searchAsma       = q         => ummahFetch(`/asma-ul-husna/search?q=${encodeURIComponent(q)}`);
+const getIslamicEvents = ()        => ummahFetch("/islamic-events");
+const getQibla         = (lat,lng) => ummahFetch(`/qibla?lat=${lat}&lng=${lng}`);
+const getWordByWord    = (s,a)      => ummahFetch(`/quran/words/${s}/${a}`);
 
 // ═══════════════════════════════════════════════════════════════
 //  EMBED BUILDERS
@@ -648,7 +604,7 @@ function ayahEmbed(v, trKey = DEFAULT_TR) {
       { name: `${E.pin} Ayah`,          value: `${v.ayahNum} / ${v.totalAyahs}`,    inline: true },
       { name: `${E.newspaper} Page`,    value: v.page ? `${v.page} / 604` : "—",    inline: true },
       { name: `${E.sandclock} Juz`,     value: v.juz  ? `${v.juz} / 30`  : "—",    inline: true },
-      { name: `${E.earth} Translation`, value: `<:internet:1490332305196060723> ${tr.name}`, inline: true },
+      { name: `${E.earth} Translation`, value: `<:internet:1490332305196060723> ${tr.name}`,             inline: true },
     )
     .setFooter({ text: "القرآن الكريم — The Noble Quran" })
     .setTimestamp();
@@ -664,7 +620,7 @@ function surahEmbed(s, trKey = DEFAULT_TR) {
       { name: `${E.message} Meaning`,    value: s.meaning || "—",           inline: true },
       { name: `${E.pin} Revelation`,     value: `${icon} ${s.revelation}`,  inline: true },
       { name: `${E.pin} Total Ayahs`,    value: `${s.totalAyahs}`,          inline: true },
-      { name: `${E.earth} Translation`,  value: `<:internet:1490332305196060723> ${tr.name}`, inline: true },
+      { name: `${E.earth} Translation`,  value: `<:internet:1490332305196060723> ${tr.name}`,    inline: true },
     );
   if (s.first) {
     embed.addFields(
@@ -689,7 +645,7 @@ function tafsirEmbed(data, key) {
       { name: `${E.speaker} Language`,   value: t.lang,         inline: true },
       { name: `${E.pin} Ayah`,           value: data.verse_key, inline: true }
     )
-    .setFooter({ text: "spa5k/tafsir_api • تفسير القرآن الكريم" }).setTimestamp();
+    .setFooter({ text: "UmmahAPI • تفسير القرآن الكريم" }).setTimestamp();
 }
 
 function duaEmbed(dua) {
@@ -718,9 +674,9 @@ function asmaEmbed(name) {
     .setTitle(`${name.arabic}  —  ${name.transliteration}`)
     .setDescription(desc)
     .addFields(
-      { name: `${E.pin} Number`,             value: `${name.number} / 99`,       inline: true },
+      { name: `${E.pin} Number`,           value: `${name.number} / 99`,       inline: true },
       { name: `${E.pencil} Transliteration`, value: name.transliteration || "—", inline: true },
-      { name: `${E.brain} Translation`,      value: name.english || "—",          inline: true },
+      { name: `${E.brain} Translation`,    value: name.english || "—",          inline: true },
     )
     .setFooter({ text: "وَلِلَّهِ الْأَسْمَاءُ الْحُسْنَىٰ — To Allah belong the Most Beautiful Names. (7:180)" })
     .setTimestamp();
@@ -741,6 +697,11 @@ function errEmbed(msg) {
     .setDescription(msg).setFooter({ text: "Check the number/name and try again" });
 }
 
+// ─────────────────────────────────────────────────────
+//  NEW EMBED BUILDERS
+// ─────────────────────────────────────────────────────
+
+
 function qiblaEmbed(data, city) {
   const bearing = data.bearing ?? data.direction ?? data.qibla ?? "—";
   const rounded = typeof bearing === "number" ? `${bearing.toFixed(1)}°` : `${bearing}°`;
@@ -756,6 +717,23 @@ function qiblaEmbed(data, city) {
 function getCompassDir(deg) {
   const dirs = ["N","NE","E","SE","S","SW","W","NW","N"];
   return dirs[Math.round(deg / 45) % 8];
+}
+
+function islamicMonthsEmbed(months) {
+  const list = Array.isArray(months) ? months : (months.months || Object.values(months));
+  const lines = list.map(m => {
+    const num  = m.number ?? m.id ?? "";
+    const name = m.name || m.english || m.transliteration || "";
+    const ar   = m.arabic || "";
+    const days = m.days ? ` — ${m.days} days` : "";
+    return `**${num}.** ${name}${ar ? ` (${ar})` : ""}${days}`;
+  });
+  return new EmbedBuilder()
+    .setColor(0x3E2723)
+    .setTitle("Islamic Months")
+    .setDescription(lines.join("\n") || "No data available.")
+    .setFooter({ text: "UmmahAPI • Hijri Calendar" })
+    .setTimestamp();
 }
 
 function islamicEventsEmbed(events) {
@@ -804,9 +782,6 @@ function duaCategoriesEmbed(cats) {
     .setTimestamp();
 }
 
-// ─────────────────────────────────────────────────────
-//  WORD BY WORD EMBED  — fixed: no [object Object], no ( )
-// ─────────────────────────────────────────────────────
 function wordByWordEmbed(data, surahN, ayahN) {
   const words = Array.isArray(data) ? data : (data.words || data.data || []);
   const surahName = SURAH_NAMES[surahN - 1] || `Surah ${surahN}`;
@@ -819,18 +794,14 @@ function wordByWordEmbed(data, surahN, ayahN) {
   }
 
   const lines = words.map((w, i) => {
-    const arabic   = stripParens(safeStr(w.arabic)   || safeStr(w.text)   || safeStr(w.word))   || "—";
-    const translit = stripParens(safeStr(w.transliteration) || safeStr(w.roman));
-    const meaning  = stripParens(safeStr(w.translation)     || safeStr(w.meaning) || safeStr(w.english));
-    const pos      = safeStr(w.part_of_speech) || safeStr(w.pos);
-
-    let line = `**${i + 1}.** ${arabic}`;
-    if (translit) line += `  —  *${translit}*`;
-    if (meaning)  line += `\n${E.brain} ${meaning}`;
-    if (pos)      line += `  •  \`${pos}\``;
-    return line;
+    const arabic   = w.arabic || w.text || w.word || "—";
+    const translit = w.transliteration || w.roman || "";
+    const meaning  = w.translation || w.meaning || w.english || "";
+    const pos      = w.part_of_speech || w.pos || "";
+    return `**${i + 1}.** ${arabic}${translit ? `  —  *${translit}*` : ""}${meaning ? `\n${E.brain} ${meaning}` : ""}${pos ? `  •  \`${pos}\`` : ""}`;
   });
 
+  // Split into chunks if too long
   const chunks = [];
   let current  = "";
   for (const line of lines) {
@@ -848,12 +819,51 @@ function wordByWordEmbed(data, surahN, ayahN) {
     .setTitle(`Word by Word — ${surahName} ${surahN}:${ayahN}`)
     .setDescription(chunks[0])
     .addFields(
-      { name: `${E.book} Surah`, value: `${surahName} (${surahN})`, inline: true },
-      { name: `${E.pin} Ayah`,   value: `${ayahN}`,                 inline: true },
-      { name: `${E.pin} Words`,  value: `${words.length}`,          inline: true },
+      { name: `${E.book} Surah`,  value: `${surahName} (${surahN})`, inline: true },
+      { name: `${E.pin} Ayah`,    value: `${ayahN}`,                 inline: true },
+      { name: `${E.pin} Words`,   value: `${words.length}`,          inline: true },
     )
     .setFooter({ text: "UmmahAPI • Quranic Arabic Word Analysis" })
     .setTimestamp();
+}
+
+function arabicWordEmbed(data, word) {
+  // freedictionaryapi.com returns an array of entries
+  const entry = Array.isArray(data) ? data[0] : data;
+  if (!entry) {
+    return new EmbedBuilder().setColor(0x1A237E)
+      .setTitle(`Arabic Dictionary — ${word}`)
+      .setDescription("No definition found. Make sure the word is spelled correctly in Arabic.")
+      .setFooter({ text: "Wiktionary via freedictionaryapi.com" });
+  }
+
+  const phonetic = entry.phonetic || entry.phonetics?.find(p => p.text)?.text || "";
+  const meanings = entry.meanings || [];
+
+  let desc = "";
+  for (const m of meanings.slice(0, 3)) {
+    const pos  = m.partOfSpeech || "";
+    const defs = (m.definitions || []).slice(0, 2);
+    desc += `**${pos}**\n`;
+    for (const d of defs) {
+      desc += `${E.paper} ${d.definition}\n`;
+      if (d.example) desc += `*"${d.example}"*\n`;
+      if (d.synonyms?.length) desc += `${E.brain} Synonyms: ${d.synonyms.slice(0,4).join(", ")}\n`;
+    }
+    desc += "\n";
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(0x1A237E)
+    .setTitle(`${word}${phonetic ? `  —  ${phonetic}` : ""}`)
+    .setDescription(desc.trim() || "No definitions available.")
+    .setFooter({ text: "Wiktionary via freedictionaryapi.com" })
+    .setTimestamp();
+
+  // Add origin if available
+  if (entry.origin) embed.addFields({ name: `${E.link} Origin`, value: entry.origin, inline: false });
+
+  return embed;
 }
 
 function autoAyahEmbed(v, trKey = DEFAULT_TR) {
@@ -871,7 +881,7 @@ function autoAyahEmbed(v, trKey = DEFAULT_TR) {
       { name: `${E.pin} Ayah`,          value: `${v.ayahNum} / ${v.totalAyahs}`,    inline: true },
       { name: `${E.newspaper} Page`,    value: v.page ? `${v.page} / 604` : "—",    inline: true },
       { name: `${E.sandclock} Juz`,     value: v.juz  ? `${v.juz} / 30`  : "—",    inline: true },
-      { name: `${E.earth} Translation`, value: `<:internet:1490332305196060723> ${tr.name}`, inline: true },
+      { name: `${E.earth} Translation`, value: `<:internet:1490332305196060723> ${tr.name}`,             inline: true },
     )
     .setFooter({ text: 'React to dismiss  •  القرآن الكريم' });
 }
@@ -970,85 +980,6 @@ function asmaBtns(n) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ARABIC LEXICON — arabiclexicon.hawramani.com (HTML scrape)
-//  No public API; scrape the WordPress /?s= search endpoint.
-// ═══════════════════════════════════════════════════════════════
-async function fetchHawramani(word) {
-  const url = `https://arabiclexicon.hawramani.com/?s=${encodeURIComponent(word)}`;
-  const res  = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; IslamBot/1.0)" },
-  });
-  if (!res.ok) throw new Error(`Hawramani HTTP ${res.status}`);
-  const html = await res.text();
-
-  const results = [];
-
-  const articleRe = /<article[^>]*>([\s\S]*?)<\/article>/gi;
-  let artMatch;
-  while ((artMatch = articleRe.exec(html)) !== null && results.length < 5) {
-    const block = artMatch[1];
-
-    const titleM = /<h[123][^>]*>[\s\S]*?<a[^>]*>([^<]+)<\/a>/i.exec(block);
-    const title  = titleM ? titleM[1].trim() : null;
-    if (!title) continue;
-
-    const linkM = /href="([^"]+)"/i.exec(block);
-    const link  = linkM ? linkM[1].trim() : null;
-
-    const excM  = /<div[^>]*entry-summary[^>]*>([\s\S]*?)<\/div>/i.exec(block)
-               || /<p>([\s\S]*?)<\/p>/i.exec(block);
-    const excRaw = excM ? excM[1] : "";
-    const excerpt = excRaw
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
-      .replace(/&#8230;/g,"…").replace(/&nbsp;/g," ").replace(/&#[0-9]+;/g,"")
-      .trim()
-      .substring(0, 400);
-
-    results.push({ title, link, excerpt });
-  }
-
-  return results;
-}
-
-function hawramaniEmbed(word, results) {
-  if (!results.length) {
-    return new EmbedBuilder()
-      .setColor(0x1A237E)
-      .setTitle(`${E.brain}  Arabic Word — ${word}`)
-      .setDescription(
-        `No entries found for **${word}** in the Arabic Lexicon.\n\n` +
-        `Try searching directly: [arabiclexicon.hawramani.com](https://arabiclexicon.hawramani.com/?s=${encodeURIComponent(word)})\n\n` +
-        `${E.idea} *Tip: Use \`/asmasearch\` for the 99 Names of Allah, or \`/wordbyword\` for words inside a Quranic verse.*`
-      )
-      .setFooter({ text: "arabiclexicon.hawramani.com • 47 classical Arabic dictionaries" })
-      .setTimestamp();
-  }
-
-  const lines = results.map((r, i) => {
-    const excerpt = r.excerpt ? `\n${E.paper} *${r.excerpt}*` : "";
-    const link    = r.link ? ` [↗](${r.link})` : "";
-    return `**${i + 1}. ${r.title}**${link}${excerpt}`;
-  });
-
-  let desc = lines.join("\n\n");
-  if (desc.length > 3900) desc = desc.substring(0, 3900) + "…";
-
-  return new EmbedBuilder()
-    .setColor(0x1A237E)
-    .setTitle(`${E.brain}  Arabic Lexicon — ${word}`)
-    .setDescription(desc)
-    .addFields({
-      name:   `${E.link} Search Online`,
-      value:  `[View all results on arabiclexicon.hawramani.com](https://arabiclexicon.hawramani.com/?s=${encodeURIComponent(word)})`,
-      inline: false,
-    })
-    .setFooter({ text: `${results.length} result(s) • 47 classical dictionaries incl. Lisan al-Arab, Lane's Lexicon, Qamus al-Muhit` })
-    .setTimestamp();
-}
-
-// ═══════════════════════════════════════════════════════════════
 //  SLASH COMMANDS
 // ═══════════════════════════════════════════════════════════════
 const commands = [
@@ -1094,10 +1025,12 @@ const commands = [
   new SlashCommandBuilder().setName("collections").setDescription("List all hadith collections"),
   new SlashCommandBuilder().setName("explore").setDescription("Explore hadith collections interactively"),
 
+
   new SlashCommandBuilder().setName("qibla").setDescription("Get Qibla direction for a city")
     .addStringOption(o => o.setName("city").setDescription("City name e.g. Dubai, London, New York").setRequired(true)),
 
   new SlashCommandBuilder().setName("islamicevents").setDescription("Get upcoming Islamic events and dates"),
+
 
   new SlashCommandBuilder().setName("asmasearch").setDescription("Search the 99 Names of Allah by keyword")
     .addStringOption(o => o.setName("query").setDescription("e.g. merciful, king, light").setRequired(true)),
@@ -1108,7 +1041,7 @@ const commands = [
     .addStringOption(o => o.setName("surah").setDescription("Surah number or name e.g. Fatihah, 1").setRequired(true))
     .addIntegerOption(o => o.setName("ayah").setDescription("Ayah number").setRequired(true).setMinValue(1)),
 
-  new SlashCommandBuilder().setName("arabicword").setDescription("Look up an Arabic word")
+  new SlashCommandBuilder().setName("arabicword").setDescription("Look up an Arabic word definition")
     .addStringOption(o => o.setName("word").setDescription("Arabic word e.g. رحمة").setRequired(true)),
 ].map(c => c.toJSON());
 
@@ -1302,12 +1235,13 @@ client.on("interactionCreate", async interaction => {
       ], components: [colMenu()] });
     }
 
+
     else if (cmd === "qibla") {
       const city = interaction.options.getString("city");
       try {
-        const geoRes  = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
+        const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
         const geoJson = await geoRes.json();
-        const place   = geoJson.results?.[0];
+        const place = geoJson.results?.[0];
         if (!place) return interaction.editReply({ embeds: [errEmbed(`Could not find city **"${city}"**.`)] });
         const { latitude: lat, longitude: lng, name, country } = place;
         const data = await getQibla(lat, lng);
@@ -1327,6 +1261,7 @@ client.on("interactionCreate", async interaction => {
         await interaction.editReply({ embeds: [errEmbed("Could not fetch Islamic events.")] });
       }
     }
+
 
     else if (cmd === "asmasearch") {
       const query = interaction.options.getString("query");
@@ -1367,26 +1302,19 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    // ─── ARABIC WORD — scrapes arabiclexicon.hawramani.com (47 classical dicts) ───
     else if (cmd === "arabicword") {
       const word = interaction.options.getString("word");
       try {
-        const results = await fetchHawramani(word);
-        await interaction.editReply({ embeds: [hawramaniEmbed(word, results)] });
+        const res  = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/ar/${encodeURIComponent(word)}`);
+        if (res.status === 404) {
+          return interaction.editReply({ embeds: [errEmbed(`No definition found for **${word}**.\nMake sure it's spelled correctly in Arabic.`)] });
+        }
+        if (!res.ok) throw new Error(`Dictionary API HTTP ${res.status}`);
+        const data = await res.json();
+        await interaction.editReply({ embeds: [arabicWordEmbed(data, word)] });
       } catch(e) {
         console.error(e);
-        await interaction.editReply({ embeds: [
-          new EmbedBuilder()
-            .setColor(0x1A237E)
-            .setTitle(`${E.brain}  Arabic Word — ${word}`)
-            .setDescription(
-              `Could not fetch results automatically. Search directly:\n\n` +
-              `${E.link} [arabiclexicon.hawramani.com — **${word}**](https://arabiclexicon.hawramani.com/?s=${encodeURIComponent(word)})\n\n` +
-              `Covers 47 dictionaries including Lisān al-ʿArab, Lane's Lexicon, al-Mufradāt and more.`
-            )
-            .setFooter({ text: `Error: ${e.message}` })
-            .setTimestamp()
-        ]});
+        await interaction.editReply({ embeds: [errEmbed(`Could not look up **${word}**.\n\`${e.message}\``)] });
       }
     }
   }
@@ -1517,7 +1445,7 @@ client.on("interactionCreate", async interaction => {
         embeds: [new EmbedBuilder().setColor(0x4A148C).setTitle(`${E.book}  Choose a Tafsir`)
           .setDescription(`Select commentary for **${s}:${a}**\n\n` +
             Object.entries(TAFSIRS).map(([,v]) => `${v.flag} **${v.name}** — *${v.scholar}* (${v.lang})`).join("\n"))
-          .setFooter({ text: "تفسير القرآن الكريم — spa5k/tafsir_api" })],
+          .setFooter({ text: "تفسير القرآن الكريم — UmmahAPI" })],
         components: [tafsirMenu(parseInt(s), parseInt(a))],
       });
     }
@@ -1576,13 +1504,13 @@ function isValidAyah(s, a) {
   return s >= 1 && s <= 114 && a >= 1 && a <= (SURAH_MAX_AYAH[s] || 286);
 }
 
-const VERSE_PATTERN  = /\[?(?:([\w\u0600-\u06FF''\-\u2019 ]{2,40})\s+)?(\d{1,3}):(\d{1,3})(?:-\d{1,3})?\]?/g;
+const VERSE_PATTERN = /\[?(?:([\w\u0600-\u06FF''\-\u2019 ]{2,40})\s+)?(\d{1,3}):(\d{1,3})(?:-\d{1,3})?\]?/g;
 const HADITH_PATTERN = /(?:^|\s)(?:hadith\s+)?([a-zA-Z\u0600-\u06FF'''\- ]{2,40}?)\s+(\d{1,5})(?:\s|$|[.,!?])/gi;
 
-const autoVerseCooldown = new Map();
-const AUTO_COOLDOWN_MS  = 5000;
-const MAX_AUTO_VERSES   = 3;
-const MAX_AUTO_HADITHS  = 2;
+const autoVerseCooldown  = new Map();
+const AUTO_COOLDOWN_MS   = 5000;
+const MAX_AUTO_VERSES    = 3;
+const MAX_AUTO_HADITHS   = 2;
 
 client.on("messageCreate", async message => {
   if (message.author.bot || message.webhookId) return;
