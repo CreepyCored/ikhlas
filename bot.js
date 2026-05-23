@@ -3,23 +3,18 @@
  *   ISLAMIC KNOWLEDGE BOT
  * ═══════════════════════════════════════════════════════════════
  *
- *  Hadith  — fawazahmed0 CDN  (cdn.jsdelivr.net)   NO KEY
- *  Quran   — Quran.com API v4 (api.quran.com)      NO KEY  ← proper Uthmani script + verse marks
- *  Tafsir  — spa5k CDN        (cdn.jsdelivr.net)   NO KEY  ← 27 tafsirs
- *  Duas / Asma / Hijri — UmmahAPI                  NO KEY
+ *  Hadith  — fawazahmed0 CDN  (cdn.jsdelivr.net)  NO KEY
+ *  Quran   — AlQuran Cloud    (api.alquran.cloud)  NO KEY
+ *  Tafsir / Duas / Asma / Hijri — UmmahAPI         NO KEY
  *
  *  ENV:  DISCORD_TOKEN  (required)
  *
  *  Changes:
- *  - Quran: switched to Quran.com API v4 — proper Uthmani Unicode script,
- *    end-of-verse marks ﴿١﴾, bismillah, rub el hizb etc.
- *  - Tafsir: fixed RTL/LTR bidi distortion (reversed parens) by isolating
- *    Arabic blocks with Unicode bidi isolation markers
- *  - Tafsir: switched from UmmahAPI to spa5k/tafsir_api CDN (27 tafsirs)
- *  - New tafsirs: Ibn Kathir EN, al-Jalalayn EN, al-Sa'di EN,
- *    Muyassar AR, al-Tabari AR, Ibn Kathir AR
  *  - Asma ul Husna: shows English translation/meaning prominently
- *  - Hadith: flexible name resolution
+ *  - Hadith: flexible name resolution (al-bukhari 1, sahih al-bukhari 1,
+ *    bukhari 1, with/without diacritics, common aliases)
+ *  - Auto-verse: shows page number, cleaner embed (no <> brackets)
+ *  - Auto-verse embed improved styling overall
  *  - All emojis replaced with custom pixel server emojis
  * ═══════════════════════════════════════════════════════════════
  */
@@ -103,17 +98,9 @@ const E = {
 // ─────────────────────────────────────────────────────
 //  API BASES
 // ─────────────────────────────────────────────────────
-const FAWAZ      = "https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions";
-const QURANCOM   = "https://api.quran.com/api/v4";   // Quran.com v4 — proper Uthmani + verse marks
-const UMMAH      = "https://ummahapi.com/api";
-const SPA5K      = "https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir";
-
-// Quran.com translation IDs for English editions
-const QURANCOM_TRANSLATIONS = {
-  sahih_international: { name: "Saheeh International", flag: "🇬🇧", id: 131 },
-  pickthall:           { name: "Pickthall",             flag: "🇬🇧", id: 57  },
-  yusuf_ali:           { name: "Yusuf Ali",             flag: "🇬🇧", id: 37  },
-};
+const FAWAZ  = "https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions";
+const QURAN  = "https://api.alquran.cloud/v1";
+const UMMAH  = "https://ummahapi.com/api";
 
 // ─────────────────────────────────────────────────────
 //  COLLECTIONS
@@ -266,21 +253,22 @@ function resolveCollectionKey(input) {
 // ─────────────────────────────────────────────────────
 //  QURAN TRANSLATIONS
 // ─────────────────────────────────────────────────────
-const TRANSLATIONS = QURANCOM_TRANSLATIONS;
+const TRANSLATIONS = {
+  sahih_international: { name: "Saheeh International", flag: "🇬🇧", edition: "en.sahih"    },
+  pickthall:           { name: "Pickthall",             flag: "🇬🇧", edition: "en.pickthall" },
+  yusuf_ali:           { name: "Yusuf Ali",             flag: "🇬🇧", edition: "en.yusufali"  },
+};
 const TRANS_KEYS = Object.keys(TRANSLATIONS);
 const DEFAULT_TR = "sahih_international";
 
 // ─────────────────────────────────────────────────────
-//  TAFSIR EDITIONS  —  spa5k/tafsir_api via jsDelivr CDN
-//  Full slug list: https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir/editions.json
+//  TAFSIR EDITIONS
 // ─────────────────────────────────────────────────────
 const TAFSIRS = {
-  ibn_kathir:    { name: "Ibn Kathir",          scholar: "Hafiz Ibn Kathir",                          lang: "English", flag: "🇬🇧", slug: "en-tafisr-ibn-kathir"  },
-  jalalayn:      { name: "Tafsir al-Jalalayn",  scholar: "al-Suyuti & al-Mahalli",                    lang: "English", flag: "🇬🇧", slug: "en-al-jalalayn"         },
-  saadi:         { name: "Tafsir al-Sa'di",     scholar: "Abd al-Rahman al-Sa'di",                    lang: "English", flag: "🇬🇧", slug: "en-tafsir-al-saadi"     },
-  muyassar:      { name: "Tafsir Muyassar",     scholar: "Ministry of Islamic Affairs, Saudi Arabia", lang: "Arabic",  flag: "🇸🇦", slug: "ar-tafsir-muyassar"     },
-  tabari:        { name: "Tafsir al-Tabari",    scholar: "Imam Ibn Jarir al-Tabari",                  lang: "Arabic",  flag: "🇸🇦", slug: "ar-tafsir-al-tabari"    },
-  ibn_kathir_ar: { name: "Ibn Kathir (Arabic)", scholar: "Hafiz Ibn Kathir",                          lang: "Arabic",  flag: "🇸🇦", slug: "ar-tafsir-ibn-kathir"   },
+  ibn_kathir:    { name: "Ibn Kathir (Abridged)", scholar: "Hafiz Ibn Kathir",                          lang: "English", flag: "🇬🇧" },
+  maarif:        { name: "Ma'arif al-Qur'an",     scholar: "Mufti Muhammad Shafi",                      lang: "English", flag: "🇬🇧" },
+  muyassar:      { name: "Tafsir Muyassar",       scholar: "Ministry of Islamic Affairs, Saudi Arabia", lang: "Arabic",  flag: "🇸🇦" },
+  ibn_kathir_ar: { name: "Ibn Kathir (Arabic)",   scholar: "Hafiz Ibn Kathir",                          lang: "Arabic",  flag: "🇸🇦" },
 };
 
 // ─────────────────────────────────────────────────────
@@ -415,44 +403,13 @@ function truncate(s, max = 3800) {
 }
 
 // ─────────────────────────────────────────────────────
-//  RTL / BIDI FIX — prevents reversed parens in mixed Arabic/English
-//  Wraps each Arabic "paragraph" in Unicode bidi isolate markers so
-//  Discord renders the direction correctly without mangling punctuation.
-// ─────────────────────────────────────────────────────
-const RLI = "\u2067"; // RIGHT-TO-LEFT ISOLATE
-const PDI = "\u2069"; // POP DIRECTIONAL ISOLATE
-const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
-
-function fixBidi(text) {
-  if (!text) return text;
-  // Split on newlines, wrap lines that are predominantly Arabic
-  return text.split("\n").map(line => {
-    const arabicChars = (line.match(/[\u0600-\u06FF]/g) || []).length;
-    const latinChars  = (line.match(/[a-zA-Z]/g) || []).length;
-    // If line is majority Arabic, wrap it in RLI…PDI so bidi algo keeps parens correct
-    return arabicChars > latinChars && arabicChars > 2
-      ? `${RLI}${line}${PDI}`
-      : line;
-  }).join("\n");
-}
-
-// Convert a number to Eastern Arabic-Indic numerals used inside ﴿﴾ glyphs
-const EASTERN = ["٠","١","٢","٣","٤","٥","٦","٧","٨","٩"];
-function toEasternNum(n) {
-  return String(n).split("").map(d => EASTERN[+d] ?? d).join("");
-}
-// Append the Quranic end-of-verse mark ﴿٣﴾ to the Arabic text
-function withVerseEnd(arabicText, ayahNum) {
-  return `${arabicText} ﴿${toEasternNum(ayahNum)}﴾`;
-}
-
-// ─────────────────────────────────────────────────────
 //  SAFE STRING EXTRACTOR — prevents [object Object]
 // ─────────────────────────────────────────────────────
 function safeStr(val) {
   if (typeof val === "string") return val;
   if (val === null || val === undefined) return "";
   if (typeof val === "number") return String(val);
+  // If it's an object with a common text field, extract it
   if (typeof val === "object") {
     return val.text || val.value || val.name || val.arabic || val.english || "";
   }
@@ -529,124 +486,70 @@ async function fetchRandomHadith(colKey) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  QURAN  — Quran.com API v4
-//  Docs: https://api-docs.quran.com/
-//  Returns proper Uthmani Unicode script with full diacritics and
-//  end-of-verse marks. No API key required.
+//  QURAN  (AlQuran Cloud)
 // ═══════════════════════════════════════════════════════════════
-
-// Shared chapter meta cache to avoid redundant fetches
-const _chapterCache = new Map();
-async function getChapterMeta(surahN) {
-  if (_chapterCache.has(surahN)) return _chapterCache.get(surahN);
-  const res  = await fetch(`${QURANCOM}/chapters/${surahN}?language=en`, { headers: { Accept: "application/json" } });
-  const data = res.ok ? (await res.json()).chapter : null;
-  if (data) _chapterCache.set(surahN, data);
-  return data;
-}
-
-// Fetch a single verse with Arabic + one English translation
 async function fetchAyah(surahN, ayahN, trKey = DEFAULT_TR) {
-  const trId = TRANSLATIONS[trKey]?.id ?? TRANSLATIONS[DEFAULT_TR].id;
-  // translations param must NOT be in fields= — it's a separate top-level param
-  const url  = `${QURANCOM}/verses/by_key/${surahN}:${ayahN}`
-    + `?language=en`
-    + `&translations=${trId}`
-    + `&fields=text_uthmani,verse_number,juz_number,page_number,verse_key`;
-  const res  = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`Quran.com HTTP ${res.status}`);
+  const ed  = TRANSLATIONS[trKey]?.edition ?? TRANSLATIONS[DEFAULT_TR].edition;
+  const res = await fetch(`${QURAN}/ayah/${surahN}:${ayahN}/editions/quran-uthmani,${ed}`);
+  if (!res.ok) throw new Error(`AlQuran HTTP ${res.status}`);
   const json = await res.json();
-  const v    = json.verse;
-  if (!v) throw new Error("Quran.com: no verse in response");
-
-  const meta = await getChapterMeta(surahN);
-
-  // translations is a top-level array on the verse object
-  const trArr = Array.isArray(v.translations) ? v.translations : [];
-  const rawTr = trArr[0]?.text ?? trArr[0]?.translation ?? "";
-  const translation = rawTr ? clean(rawTr) : "Translation unavailable.";
-
+  if (json.code !== 200) throw new Error(`AlQuran: ${json.status}`);
+  const ar = json.data.find(d => d.edition.identifier === "quran-uthmani");
+  const tr = json.data.find(d => d.edition.identifier === ed);
+  if (!ar || !tr) throw new Error("AlQuran bad response");
   return {
-    surahName:   meta?.name_simple   ?? SURAH_NAMES[surahN - 1] ?? `Surah ${surahN}`,
-    surahArabic: meta?.name_arabic   ?? "",
-    surahNum:    surahN,
-    ayahNum:     v.verse_number ?? ayahN,
-    totalAyahs:  meta?.verses_count  ?? 0,
-    arabic:      withVerseEnd(v.text_uthmani ?? "", v.verse_number ?? ayahN),
-    translation,
-    page:        v.page_number  ?? null,
-    juz:         v.juz_number   ?? null,
+    surahName: ar.surah.englishName, surahArabic: ar.surah.name,
+    surahNum: ar.surah.number, ayahNum: ar.numberInSurah,
+    totalAyahs: ar.surah.numberOfAyahs,
+    arabic: ar.text, translation: clean(tr.text),
+    page: ar.page, juz: ar.juz,
   };
 }
 
-// Fetch a random verse
 async function fetchRandomAyah(trKey = DEFAULT_TR) {
-  const s    = Math.floor(Math.random() * 114) + 1;
-  const meta = await getChapterMeta(s);
-  const total = meta?.verses_count ?? 7;
-  const a    = Math.floor(Math.random() * total) + 1;
-  return fetchAyah(s, a, trKey);
+  const ed  = TRANSLATIONS[trKey]?.edition ?? TRANSLATIONS[DEFAULT_TR].edition;
+  const res = await fetch(`${QURAN}/ayah/random/editions/quran-uthmani,${ed}`);
+  if (!res.ok) throw new Error(`AlQuran HTTP ${res.status}`);
+  const json = await res.json();
+  if (json.code !== 200) throw new Error(`AlQuran: ${json.status}`);
+  const ar = json.data.find(d => d.edition.identifier === "quran-uthmani");
+  const tr = json.data.find(d => d.edition.identifier === ed);
+  if (!ar || !tr) throw new Error("AlQuran bad response");
+  return {
+    surahName: ar.surah.englishName, surahArabic: ar.surah.name,
+    surahNum: ar.surah.number, ayahNum: ar.numberInSurah,
+    totalAyahs: ar.surah.numberOfAyahs,
+    arabic: ar.text, translation: clean(tr.text),
+    page: ar.page, juz: ar.juz,
+  };
 }
 
-// Fetch surah overview + first ayah text
 async function fetchSurah(surahN, trKey = DEFAULT_TR) {
-  const trId = TRANSLATIONS[trKey]?.id ?? TRANSLATIONS[DEFAULT_TR].id;
-  const [meta, firstRes] = await Promise.all([
-    getChapterMeta(surahN),
-    fetch(
-      `${QURANCOM}/verses/by_key/${surahN}:1?language=en&translations=${trId}&fields=text_uthmani,verse_number`,
-      { headers: { Accept: "application/json" } }
-    ),
+  const ed = TRANSLATIONS[trKey]?.edition ?? TRANSLATIONS[DEFAULT_TR].edition;
+  const [infoRes, firstRes] = await Promise.all([
+    fetch(`${QURAN}/surah/${surahN}`),
+    fetch(`${QURAN}/ayah/${surahN}:1/editions/quran-uthmani,${ed}`),
   ]);
-  if (!meta) throw new Error(`Quran.com: could not load chapter ${surahN}`);
+  if (!infoRes.ok) throw new Error(`AlQuran surah HTTP ${infoRes.status}`);
+  const info = (await infoRes.json()).data;
   let first = null;
   if (firstRes.ok) {
-    const fj = await firstRes.json();
-    const fv = fj.verse;
-    if (fv) {
-      const trArr = Array.isArray(fv.translations) ? fv.translations : [];
-      const rawTr = trArr[0]?.text ?? trArr[0]?.translation ?? "";
-      first = {
-        arabic:      withVerseEnd(fv.text_uthmani ?? "", fv.verse_number ?? 1),
-        translation: rawTr ? clean(rawTr) : "",
-      };
+    const j = await firstRes.json();
+    if (j.code === 200) {
+      const ar = j.data.find(d => d.edition.identifier === "quran-uthmani");
+      const tr = j.data.find(d => d.edition.identifier === ed);
+      if (ar && tr) first = { arabic: ar.text, translation: clean(tr.text) };
     }
   }
   return {
-    number:      meta.id,
-    nameArabic:  meta.name_arabic,
-    nameEnglish: meta.name_simple,
-    meaning:     meta.translated_name?.name ?? "",
-    revelation:  meta.revelation_place === "makkah" ? "Meccan" : "Medinan",
-    totalAyahs:  meta.verses_count,
-    first,
+    number: info.number, nameArabic: info.name, nameEnglish: info.englishName,
+    meaning: info.englishNameTranslation, revelation: info.revelationType,
+    totalAyahs: info.numberOfAyahs, first,
   };
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SPA5K TAFSIR API  (cdn.jsdelivr.net — no key, no rate limits)
-//  URL: {SPA5K}/{slug}/{surah}/{ayah}.json
-//  Editions list: {SPA5K}/editions.json
-// ═══════════════════════════════════════════════════════════════
-async function getTafsir(tafsirKey, surahN, ayahN) {
-  const t = TAFSIRS[tafsirKey];
-  if (!t) throw new Error(`Unknown tafsir key: ${tafsirKey}`);
-  const url = `${SPA5K}/${t.slug}/${surahN}/${ayahN}.json`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`spa5k tafsir HTTP ${res.status} — ${url}`);
-  const json = await res.json();
-  // Normalize to the shape tafsirEmbed() expects
-  const text = json.text ?? json.tafsir ?? json.content ?? json.explanation
-    ?? (typeof json === "string" ? json : null)
-    ?? "Tafsir unavailable.";
-  return {
-    verse_key: `${surahN}:${ayahN}`,
-    tafsir: { text: fixBidi(clean(String(text))) },
-  };
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  UMMAHAPI  (Duas · Asma · Hijri · Qibla · Events · WordByWord)
+//  UMMAHAPI  (Tafsir · Dua · Asma · Hijri)
 // ═══════════════════════════════════════════════════════════════
 async function ummahFetch(path) {
   const res  = await fetch(`${UMMAH}${path}`);
@@ -655,6 +558,7 @@ async function ummahFetch(path) {
   if (!json.success) throw new Error("UmmahAPI error");
   return json.data;
 }
+const getTafsir        = (k,s,a)     => ummahFetch(`/tafsir/${k}/surah/${s}/ayah/${a}`);
 const getRandomDua     = ()          => ummahFetch("/duas/random");
 const getDuasByCat     = c           => ummahFetch(`/duas/category/${c}`);
 const getAllAsma        = ()          => ummahFetch("/asma-ul-husna");
@@ -703,23 +607,21 @@ function hadithEmbed(h, showArabic = false) {
 function ayahEmbed(v, trKey = DEFAULT_TR) {
   const tr = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
 
-  // Arabic first (blockquoted so Discord renders it larger/distinct), then translation
-  let desc = "";
-  if (v.arabic) desc += `> ${v.arabic}\n\n`;
-  desc += v.translation || "Translation unavailable.";
+  let desc = v.translation || "Translation unavailable.";
+  if (v.arabic) desc += `\n\n> ${v.arabic}`;
 
   return new EmbedBuilder()
     .setColor(0x1B5E20)
     .setTitle(`${v.surahName} ${v.surahNum}:${v.ayahNum}  —  ${tr.name}`)
     .setDescription(desc)
     .addFields(
-      { name: `${E.book} Surah`,        value: `${v.surahName} (${v.surahArabic || v.surahName})`, inline: true },
-      { name: `${E.pin} Ayah`,          value: `${v.ayahNum}${v.totalAyahs ? ` / ${v.totalAyahs}` : ""}`, inline: true },
+      { name: `${E.book} Surah`,        value: `${v.surahName} (${v.surahArabic})`, inline: true },
+      { name: `${E.pin} Ayah`,          value: `${v.ayahNum} / ${v.totalAyahs}`,    inline: true },
       { name: `${E.newspaper} Page`,    value: v.page ? `${v.page} / 604` : "—",    inline: true },
       { name: `${E.sandclock} Juz`,     value: v.juz  ? `${v.juz} / 30`  : "—",    inline: true },
       { name: `${E.earth} Translation`, value: `<:internet:1490332305196060723> ${tr.name}`, inline: true },
     )
-    .setFooter({ text: "القرآن الكريم — Quran.com" })
+    .setFooter({ text: "القرآن الكريم — The Noble Quran" })
     .setTimestamp();
 }
 
@@ -737,7 +639,8 @@ function surahEmbed(s, trKey = DEFAULT_TR) {
     );
   if (s.first) {
     embed.addFields(
-      { name: `${E.letter} First Ayah`, value: `> ${s.first.arabic}\n\n*"${s.first.translation}"*`, inline: false }
+      { name: `${E.letter} First Ayah (Arabic)`, value: s.first.arabic,               inline: false },
+      { name: `${E.book} Translation`,            value: `*"${s.first.translation}"*`, inline: false }
     );
   }
   embed.setFooter({ text: "القرآن الكريم — AlQuran Cloud" }).setTimestamp();
@@ -757,7 +660,7 @@ function tafsirEmbed(data, key) {
       { name: `${E.speaker} Language`,   value: t.lang,         inline: true },
       { name: `${E.pin} Ayah`,           value: data.verse_key, inline: true }
     )
-    .setFooter({ text: "spa5k/tafsir_api • تفسير القرآن الكريم" }).setTimestamp();
+    .setFooter({ text: "UmmahAPI • تفسير القرآن الكريم" }).setTimestamp();
 }
 
 function duaEmbed(dua) {
@@ -887,6 +790,7 @@ function wordByWordEmbed(data, surahN, ayahN) {
   }
 
   const lines = words.map((w, i) => {
+    // Safely extract strings; if the field is an object, drill into it
     const arabic   = stripParens(safeStr(w.arabic)   || safeStr(w.text)   || safeStr(w.word))   || "—";
     const translit = stripParens(safeStr(w.transliteration) || safeStr(w.roman));
     const meaning  = stripParens(safeStr(w.translation)     || safeStr(w.meaning) || safeStr(w.english));
@@ -899,6 +803,7 @@ function wordByWordEmbed(data, surahN, ayahN) {
     return line;
   });
 
+  // Split into chunks if too long
   const chunks = [];
   let current  = "";
   for (const line of lines) {
@@ -924,40 +829,24 @@ function wordByWordEmbed(data, surahN, ayahN) {
     .setTimestamp();
 }
 
-// ─────────────────────────────────────────────────────
-//  AUTO EMBEDS — BibleBot-style: minimal, just title + text + subtle footer
-//  Used only by the message auto-detection handler, not slash commands.
-// ─────────────────────────────────────────────────────
 function autoAyahEmbed(v, trKey = DEFAULT_TR) {
-  const tr   = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
-  const ref  = `${v.surahName} ${v.surahNum}:${v.ayahNum}`;
-  const meta = [
-    v.page ? `Page ${v.page}` : null,
-    v.juz  ? `Juz ${v.juz}`  : null,
-  ].filter(Boolean).join("  •  ");
+  const tr = TRANSLATIONS[trKey] ?? TRANSLATIONS[DEFAULT_TR];
 
-  // Arabic line then translation — keep it tight, no fields
-  let desc = "";
-  if (v.arabic) desc += `${v.arabic}\n\n`;
-  desc += `*${v.translation || "Translation unavailable."}*`;
+  let desc = v.translation || "Translation unavailable.";
+  if (v.arabic) desc += `\n\n> ${v.arabic}`;
 
   return new EmbedBuilder()
     .setColor(0x1B5E20)
-    .setTitle(`${ref} — ${tr.name}`)
-    .setDescription(truncate(desc, 3800))
-    .setFooter({ text: `${meta ? meta + "  •  " : ""}القرآن الكريم  •  React ${E.recycle} to dismiss` });
-}
-
-function autoHadithEmbed(h) {
-  const col  = COLLECTIONS[h.colKey];
-  const g    = h.grade ? (GRADE_META[h.grade] ?? null) : null;
-  const grade = g ? `${g.emoji} ${g.label}  •  ` : "";
-
-  return new EmbedBuilder()
-    .setColor(g?.color ?? col.color)
-    .setTitle(`${col.name} ${h.number}`)
-    .setDescription(`*${truncate(h.english || "Translation unavailable.", 3800)}*`)
-    .setFooter({ text: `${grade}${col.name}  •  React ${E.recycle} to dismiss` });
+    .setTitle(`${v.surahName} ${v.surahNum}:${v.ayahNum}  —  ${tr.name}`)
+    .setDescription(desc)
+    .addFields(
+      { name: `${E.book} Surah`,        value: `${v.surahName} (${v.surahArabic})`, inline: true },
+      { name: `${E.pin} Ayah`,          value: `${v.ayahNum} / ${v.totalAyahs}`,    inline: true },
+      { name: `${E.newspaper} Page`,    value: v.page ? `${v.page} / 604` : "—",    inline: true },
+      { name: `${E.sandclock} Juz`,     value: v.juz  ? `${v.juz} / 30`  : "—",    inline: true },
+      { name: `${E.earth} Translation`, value: `<:internet:1490332305196060723> ${tr.name}`, inline: true },
+    )
+    .setFooter({ text: 'React to dismiss  •  القرآن الكريم' });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1067,18 +956,23 @@ async function fetchHawramani(word) {
 
   const results = [];
 
+  // Parse article entries from WordPress search results
+  // Each result is wrapped in <article ...> ... </article>
   const articleRe = /<article[^>]*>([\s\S]*?)<\/article>/gi;
   let artMatch;
   while ((artMatch = articleRe.exec(html)) !== null && results.length < 5) {
     const block = artMatch[1];
 
+    // Title — inside <h2 ...><a ...>TITLE</a></h2>
     const titleM = /<h[123][^>]*>[\s\S]*?<a[^>]*>([^<]+)<\/a>/i.exec(block);
     const title  = titleM ? titleM[1].trim() : null;
     if (!title) continue;
 
+    // Link
     const linkM = /href="([^"]+)"/i.exec(block);
     const link  = linkM ? linkM[1].trim() : null;
 
+    // Excerpt — inside <div class="entry-summary"> or <p>
     const excM  = /<div[^>]*entry-summary[^>]*>([\s\S]*?)<\/div>/i.exec(block)
                || /<p>([\s\S]*?)<\/p>/i.exec(block);
     const excRaw = excM ? excM[1] : "";
@@ -1116,6 +1010,7 @@ function hawramaniEmbed(word, results) {
     return `**${i + 1}. ${r.title}**${link}${excerpt}`;
   });
 
+  // Chunk if too long
   let desc = lines.join("\n\n");
   if (desc.length > 3900) desc = desc.substring(0, 3900) + "…";
 
@@ -1459,6 +1354,7 @@ client.on("interactionCreate", async interaction => {
         await interaction.editReply({ embeds: [hawramaniEmbed(word, results)] });
       } catch(e) {
         console.error(e);
+        // Fallback: show direct link if scrape fails
         await interaction.editReply({ embeds: [
           new EmbedBuilder()
             .setColor(0x1A237E)
@@ -1601,7 +1497,7 @@ client.on("interactionCreate", async interaction => {
         embeds: [new EmbedBuilder().setColor(0x4A148C).setTitle(`${E.book}  Choose a Tafsir`)
           .setDescription(`Select commentary for **${s}:${a}**\n\n` +
             Object.entries(TAFSIRS).map(([,v]) => `${v.flag} **${v.name}** — *${v.scholar}* (${v.lang})`).join("\n"))
-          .setFooter({ text: "تفسير القرآن الكريم — spa5k/tafsir_api" })],
+          .setFooter({ text: "تفسير القرآن الكريم — UmmahAPI" })],
         components: [tafsirMenu(parseInt(s), parseInt(a))],
       });
     }
@@ -1719,7 +1615,7 @@ client.on("messageCreate", async message => {
   const hadithResults = await Promise.allSettled(hadithMatches.map(m => fetchHadith(m.colKey, m.num)));
 
   const verseEmbeds  = verseResults.filter(r => r.status === "fulfilled").map(r => autoAyahEmbed(r.value));
-  const hadithEmbeds = hadithResults.filter(r => r.status === "fulfilled").map(r => autoHadithEmbed(r.value));
+  const hadithEmbeds = hadithResults.filter(r => r.status === "fulfilled").map(r => hadithEmbed(r.value));
 
   const embeds = [...verseEmbeds, ...hadithEmbeds];
   if (!embeds.length) return;
