@@ -535,30 +535,43 @@ async function fetchRandomHadith(colKey) {
 //  end-of-verse marks. No API key required.
 // ═══════════════════════════════════════════════════════════════
 
+// Shared chapter meta cache to avoid redundant fetches
+const _chapterCache = new Map();
+async function getChapterMeta(surahN) {
+  if (_chapterCache.has(surahN)) return _chapterCache.get(surahN);
+  const res  = await fetch(`${QURANCOM}/chapters/${surahN}?language=en`, { headers: { Accept: "application/json" } });
+  const data = res.ok ? (await res.json()).chapter : null;
+  if (data) _chapterCache.set(surahN, data);
+  return data;
+}
+
 // Fetch a single verse with Arabic + one English translation
 async function fetchAyah(surahN, ayahN, trKey = DEFAULT_TR) {
   const trId = TRANSLATIONS[trKey]?.id ?? TRANSLATIONS[DEFAULT_TR].id;
-  const url  = `${QURANCOM}/verses/by_key/${surahN}:${ayahN}?language=en&translations=${trId}&fields=text_uthmani,verse_number,juz_number,page_number,verse_key&audio=0`;
+  // translations param must NOT be in fields= — it's a separate top-level param
+  const url  = `${QURANCOM}/verses/by_key/${surahN}:${ayahN}`
+    + `?language=en`
+    + `&translations=${trId}`
+    + `&fields=text_uthmani,verse_number,juz_number,page_number,verse_key`;
   const res  = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) throw new Error(`Quran.com HTTP ${res.status}`);
   const json = await res.json();
   const v    = json.verse;
   if (!v) throw new Error("Quran.com: no verse in response");
 
-  // Also fetch surah meta so we have the Arabic surah name
-  const metaRes = await fetch(`${QURANCOM}/chapters/${surahN}?language=en`, { headers: { Accept: "application/json" } });
-  const meta    = metaRes.ok ? (await metaRes.json()).chapter : null;
+  const meta = await getChapterMeta(surahN);
 
-  const translation = v.translations?.[0]?.text
-    ? clean(v.translations[0].text)
-    : "Translation unavailable.";
+  // translations is a top-level array on the verse object
+  const trArr = Array.isArray(v.translations) ? v.translations : [];
+  const rawTr = trArr[0]?.text ?? trArr[0]?.translation ?? "";
+  const translation = rawTr ? clean(rawTr) : "Translation unavailable.";
 
   return {
-    surahName:   meta?.name_simple    ?? SURAH_NAMES[surahN - 1] ?? `Surah ${surahN}`,
-    surahArabic: meta?.name_arabic    ?? "",
+    surahName:   meta?.name_simple   ?? SURAH_NAMES[surahN - 1] ?? `Surah ${surahN}`,
+    surahArabic: meta?.name_arabic   ?? "",
     surahNum:    surahN,
     ayahNum:     v.verse_number ?? ayahN,
-    totalAyahs:  meta?.verses_count   ?? 0,
+    totalAyahs:  meta?.verses_count  ?? 0,
     arabic:      withVerseEnd(v.text_uthmani ?? "", v.verse_number ?? ayahN),
     translation,
     page:        v.page_number  ?? null,
@@ -568,42 +581,44 @@ async function fetchAyah(surahN, ayahN, trKey = DEFAULT_TR) {
 
 // Fetch a random verse
 async function fetchRandomAyah(trKey = DEFAULT_TR) {
-  // Pick a random surah weighted by length, then a random ayah within it
-  const s = Math.floor(Math.random() * 114) + 1;
-  const metaRes = await fetch(`${QURANCOM}/chapters/${s}?language=en`, { headers: { Accept: "application/json" } });
-  const meta    = metaRes.ok ? (await metaRes.json()).chapter : null;
-  const total   = meta?.verses_count ?? 7;
-  const a       = Math.floor(Math.random() * total) + 1;
+  const s    = Math.floor(Math.random() * 114) + 1;
+  const meta = await getChapterMeta(s);
+  const total = meta?.verses_count ?? 7;
+  const a    = Math.floor(Math.random() * total) + 1;
   return fetchAyah(s, a, trKey);
 }
 
 // Fetch surah overview + first ayah text
 async function fetchSurah(surahN, trKey = DEFAULT_TR) {
   const trId = TRANSLATIONS[trKey]?.id ?? TRANSLATIONS[DEFAULT_TR].id;
-  const [metaRes, firstRes] = await Promise.all([
-    fetch(`${QURANCOM}/chapters/${surahN}?language=en`, { headers: { Accept: "application/json" } }),
-    fetch(`${QURANCOM}/verses/by_key/${surahN}:1?language=en&translations=${trId}&fields=text_uthmani,verse_number&audio=0`, { headers: { Accept: "application/json" } }),
+  const [meta, firstRes] = await Promise.all([
+    getChapterMeta(surahN),
+    fetch(
+      `${QURANCOM}/verses/by_key/${surahN}:1?language=en&translations=${trId}&fields=text_uthmani,verse_number`,
+      { headers: { Accept: "application/json" } }
+    ),
   ]);
-  if (!metaRes.ok) throw new Error(`Quran.com chapters HTTP ${metaRes.status}`);
-  const info = (await metaRes.json()).chapter;
+  if (!meta) throw new Error(`Quran.com: could not load chapter ${surahN}`);
   let first = null;
   if (firstRes.ok) {
     const fj = await firstRes.json();
     const fv = fj.verse;
     if (fv) {
+      const trArr = Array.isArray(fv.translations) ? fv.translations : [];
+      const rawTr = trArr[0]?.text ?? trArr[0]?.translation ?? "";
       first = {
         arabic:      withVerseEnd(fv.text_uthmani ?? "", fv.verse_number ?? 1),
-        translation: clean(fv.translations?.[0]?.text ?? ""),
+        translation: rawTr ? clean(rawTr) : "",
       };
     }
   }
   return {
-    number:     info.id,
-    nameArabic: info.name_arabic,
-    nameEnglish: info.name_simple,
-    meaning:    info.translated_name?.name ?? "",
-    revelation: info.revelation_place === "makkah" ? "Meccan" : "Medinan",
-    totalAyahs: info.verses_count,
+    number:      meta.id,
+    nameArabic:  meta.name_arabic,
+    nameEnglish: meta.name_simple,
+    meaning:     meta.translated_name?.name ?? "",
+    revelation:  meta.revelation_place === "makkah" ? "Meccan" : "Medinan",
+    totalAyahs:  meta.verses_count,
     first,
   };
 }
